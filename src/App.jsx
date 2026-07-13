@@ -54,7 +54,7 @@ const freshDocState = (docType = "quote") => ({
   contactPhone: "",
   contactFax: "",
   date: new Date().toISOString().split("T")[0],
-  vatRate: 17,
+  vatRate: 18,
   customVat: "",
   items: [freshItem()],
   notes: "",
@@ -153,11 +153,13 @@ function DocumentPreview({ company, doc }) {
       {/* ── LETTERHEAD HEADER ── */}
       <div className="letterhead">
         <div className="letterhead-main">
-          <img src={logoImg} alt="לוגו" className="letterhead-logo" />
           <div className="letterhead-titles">
             <h1>{company.name}</h1>
             <h2>{company.subtitle}</h2>
-            <div className="letterhead-trade">{company.tradeDesc}</div>
+            <div className="letterhead-trade-wrap">
+              <img src={logoImg} alt="לוגו" className="letterhead-logo" />
+              <div className="letterhead-trade">{company.tradeDesc}</div>
+            </div>
           </div>
         </div>
         <div className="letterhead-contact">
@@ -872,9 +874,22 @@ function CompanySettings({ company, onChange }) {
 //  MAIN APP
 // ═══════════════════════════════════════════════
 
+const COMPANY_STORAGE_KEY = "sharara_company_settings";
+
+function loadCompany() {
+  try {
+    const raw = localStorage.getItem(COMPANY_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && parsed.name) return parsed;
+    }
+  } catch {}
+  return DEFAULT_COMPANY;
+}
+
 export default function App() {
   const [doc, setDoc] = useState(freshDocState);
-  const [company, setCompany] = useState(DEFAULT_COMPANY);
+  const [company, setCompany] = useState(loadCompany);
   const [activeTab, setActiveTab] = useState("new");
   const [previewOverride, setPreviewOverride] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -898,6 +913,12 @@ export default function App() {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COMPANY_STORAGE_KEY, JSON.stringify(company));
+    } catch {}
+  }, [company]);
 
   const handleSaveAndPrint = useCallback(async () => {
     if (saving) return;
