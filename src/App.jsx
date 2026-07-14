@@ -3,9 +3,14 @@ import {
   saveNewDocument,
   listDocuments,
   deleteDocument,
+  restoreDocument,
+  exportBackupToFirestore,
+  resetAllActiveDocuments,
+  getProjectedSerial,
+  normalizeDoc,
 } from "./firebase";
 import { getAllCustomers, getProjectsForCustomer, getCustomerDetails, harvestCustomerProject } from "./customerProjectDB";
-import { getNextSerial, incrementSerial, getAllCounters, setSerial, formatSerial } from "./serialCounter";
+import { incrementSerial, getAllCounters, setSerial } from "./serialCounter";
 import SearchableDropdown from "./SearchableDropdown";
 import logoImg from "./logo.png";
 import signatureImg from "./SHARARA SIGNATURE.png";
@@ -47,7 +52,7 @@ const freshDocState = (docType = "quote") => ({
   docType,
   customDocType: "",
   useCustomDocType: false,
-  serialNumber: String(getNextSerial(docType)),
+  serialNumber: "",
   clientName: "",
   projectName: "",
   contactPerson: "",
@@ -112,6 +117,10 @@ function deepCopyDoc(doc) {
   };
 }
 
+function deepCopyCompany(c) {
+  return { ...c };
+}
+
 function validateDocument(doc) {
   const errors = {};
   const clientOk = doc.clientName && doc.clientName.trim().length > 0;
@@ -139,6 +148,23 @@ function Toast({ message, type }) {
 // ═══════════════════════════════════════════════
 
 function DocumentPreview({ company, doc }) {
+  const headerCompany = doc.companySnapshot || company;
+  const [projectedSerial, setProjectedSerial] = useState(null);
+
+  useEffect(() => {
+    if (doc.serialNumber && String(doc.serialNumber).trim()) {
+      setProjectedSerial(null);
+    } else {
+      setProjectedSerial(null);
+      getProjectedSerial().then((s) => setProjectedSerial(s)).catch(() => {});
+    }
+  }, [doc.serialNumber, doc.docId]);
+
+  const serialValue = doc.serialNumber && String(doc.serialNumber).trim()
+    ? String(doc.serialNumber).padStart(6, "0")
+    : projectedSerial
+      ? String(projectedSerial).padStart(6, "0")
+      : null;
   const vatRate = getEffectiveVatRate(doc);
   const subtotal = useMemo(() => calcSubtotal(doc.items), [doc.items]);
   const vatAmt = useMemo(() => calcVAT(subtotal, vatRate), [subtotal, vatRate]);
@@ -154,29 +180,27 @@ function DocumentPreview({ company, doc }) {
       <div className="letterhead">
         <div className="letterhead-main">
           <div className="letterhead-titles">
-            <h1>{company.name}</h1>
-            <h2>{company.subtitle}</h2>
+            <h1>{headerCompany.name}</h1>
+            <h2>{headerCompany.subtitle}</h2>
             <div className="letterhead-trade-wrap">
               <img src={logoImg} alt="לוגו" className="letterhead-logo" />
-              <div className="letterhead-trade">{company.tradeDesc}</div>
+              <div className="letterhead-trade">{headerCompany.tradeDesc}</div>
             </div>
           </div>
         </div>
         <div className="letterhead-contact">
-          <span>Tel: <span className="dir-ltr">{company.phone}</span></span>
-          <span>Fax: <span className="dir-ltr">{company.fax}</span></span>
-          <span>Mobile: <span className="dir-ltr">{company.mobile}</span></span>
-          <span>{company.email}</span>
-          <span>{company.website}</span>
-          <span>{company.address}</span>
+          <span>Tel: <span className="dir-ltr">{headerCompany.phone}</span></span>
+          <span>Fax: <span className="dir-ltr">{headerCompany.fax}</span></span>
+          <span>Mobile: <span className="dir-ltr">{headerCompany.mobile}</span></span>
+          <span>{headerCompany.email}</span>
+          <span>{headerCompany.website}</span>
+          <span>{headerCompany.address}</span>
         </div>
       </div>
 
-      {/* ── DOCUMENT TITLE + SERIAL ── */}
+      {/* ── DOCUMENT TITLE ── */}
       <div className="doc-title">{label}</div>
-      {doc.serialNumber ? (
-        <div className="doc-serial">#{String(doc.serialNumber).padStart(4, "0")}</div>
-      ) : null}
+      <div className="doc-serial">מס' סידורי: {serialValue || "———"}</div>
 
       {/* ── CLIENT META ── */}
       <div className="meta-grid">
@@ -348,12 +372,6 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
 
   const effectiveVat = getEffectiveVatRate(doc);
 
-  const effectiveDocType = doc.useCustomDocType
-    ? doc.customDocType
-    : doc.docType;
-
-  const serialKey = effectiveDocType || "__custom__";
-
   return (
     <div className="space-y-4">
       {/* ── Doc Type ── */}
@@ -365,13 +383,11 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             onChange={(e) => {
               if (e.target.value === "__custom__") {
                 set("useCustomDocType", true);
-                set("serialNumber", "");
               } else {
                 const newType = e.target.value;
                 set("docType", newType);
                 set("useCustomDocType", false);
                 set("customDocType", "");
-                set("serialNumber", String(getNextSerial(newType)));
               }
             }}
             className="form-input flex-1"
@@ -575,17 +591,18 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
 // ═══════════════════════════════════════════════
 
 function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
-  const [docs, setDocs] = useState([]);
+  const [allDocs, setAllDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterType, setFilterType] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("active");
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const list = await listDocuments();
-      setDocs(list);
+      const list = await listDocuments(true);
+      setAllDocs(list);
     } catch (err) {
       setError(err.message || "Failed to load archive");
     } finally {
@@ -597,25 +614,39 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
 
   const availableTypes = useMemo(() => {
     const typeSet = new Set();
-    docs.forEach((d) => {
+    allDocs.forEach((d) => {
       const label = resolveDocLabel(d);
       if (label) typeSet.add(label);
     });
     return Array.from(typeSet).sort();
-  }, [docs]);
+  }, [allDocs]);
+
+  const activeDocs = useMemo(() => allDocs.filter((d) => d.status !== "deleted"), [allDocs]);
+  const deletedDocs = useMemo(() => allDocs.filter((d) => d.status === "deleted"), [allDocs]);
+  const statusDocs = filterStatus === "active" ? activeDocs : deletedDocs;
 
   const filteredDocs = useMemo(() => {
-    if (filterType === "all") return docs;
-    return docs.filter((d) => resolveDocLabel(d) === filterType);
-  }, [docs, filterType]);
+    if (filterType === "all") return statusDocs;
+    return statusDocs.filter((d) => resolveDocLabel(d) === filterType);
+  }, [statusDocs, filterType]);
 
   const handleDelete = async (docId, clientName) => {
     if (!window.confirm(`למחוק מסמך של "${clientName}"?`)) return;
     try {
       await deleteDocument(docId);
-      setDocs((prev) => prev.filter((d) => d.id !== docId));
+      refresh();
     } catch (err) {
       alert("שגיאה במחיקה: " + err.message);
+    }
+  };
+
+  const handleRestore = async (docId, clientName) => {
+    if (!window.confirm(`לשחזר מסמך של "${clientName}"?`)) return;
+    try {
+      await restoreDocument(docId);
+      refresh();
+    } catch (err) {
+      alert("שגיאה בשחזור: " + err.message);
     }
   };
 
@@ -626,6 +657,7 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
     delete copy.createdAt;
     delete copy.updatedAt;
     delete copy.source;
+    delete copy.status;
     if (!copy.items || copy.items.length === 0) {
       copy.items = [freshItem()];
     }
@@ -643,6 +675,16 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
     copy.useCustomDocType = copy.useCustomDocType || false;
     copy.date = new Date().toISOString().split("T")[0];
     onLoadToForm(copy);
+  };
+
+  const formatCreatedAt = (d) => {
+    if (!d.createdAt) return "";
+    const date = new Date(d.createdAt);
+    if (isNaN(date.getTime())) return "";
+    const dd = String(date.getDate()).padStart(2, "0");
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
 
   if (loading) {
@@ -665,11 +707,32 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-gray-700">ארכיון מסמכים ({filteredDocs.length}{filterType !== "all" ? ` מתוך ${docs.length}` : ""})</h3>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilterStatus("active")}
+            className={`text-xs font-semibold px-3 py-1 rounded transition-colors ${
+              filterStatus === "active"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            מסמכים פעילים ({activeDocs.length})
+          </button>
+          <button
+            onClick={() => setFilterStatus("deleted")}
+            className={`text-xs font-semibold px-3 py-1 rounded transition-colors ${
+              filterStatus === "deleted"
+                ? "bg-red-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            נמחקו ({deletedDocs.length})
+          </button>
+        </div>
         <button onClick={refresh} className="text-xs text-blue-600 hover:underline">רענון</button>
       </div>
 
-      {docs.length > 0 && (
+      {allDocs.length > 0 && (
         <div className="mb-3">
           <label className="form-label">סנן לפי סוג מסמך</label>
           <select
@@ -685,7 +748,7 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
         </div>
       )}
 
-      {docs.length === 0 ? (
+      {allDocs.length === 0 ? (
         <div className="text-center text-gray-400 text-sm py-12">אין מסמכים שמורים</div>
       ) : filteredDocs.length === 0 ? (
         <div className="text-center text-gray-400 text-sm py-12">אין מסמכים התואמים את הסינון</div>
@@ -697,12 +760,25 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
             const rate = getEffectiveVatRate(d);
             const grand = d.items ? calcGrand(sub, rate) : 0;
             const isLocal = d.source === "local";
+            const createdAtStr = formatCreatedAt(d);
             return (
-              <div key={d.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded p-2 text-xs">
+              <div key={d.id} className={`flex items-center gap-2 border rounded p-2 text-xs ${
+                d.status === "deleted"
+                  ? "bg-red-50 border-red-200"
+                  : "bg-gray-50 border-gray-200"
+              }`}>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-semibold">{typeLabel}</span>
-                    <span className="text-gray-500">{typeof d.date === "string" ? fmtDate(d.date) : ""}</span>
+                    {d.serialNumber && (
+                      <span className="text-gray-400 font-mono text-[10px]">#{String(d.serialNumber).padStart(4, "0")}</span>
+                    )}
+                    {createdAtStr && (
+                      <span className="text-gray-400 text-[10px]">{createdAtStr}</span>
+                    )}
+                    {typeof d.date === "string" && d.date && (
+                      <span className="text-gray-500 text-[10px]">ת: {fmtDate(d.date)}</span>
+                    )}
                     {isLocal && (
                       <span className="bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded text-[10px] font-semibold">מקומי</span>
                     )}
@@ -720,9 +796,15 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
                   <button onClick={() => handleDuplicate(d)} className="bg-green-50 hover:bg-green-100 text-green-700 px-2 py-1 rounded transition-colors" title="שכפל">
                     📋
                   </button>
-                  <button onClick={() => handleDelete(d.id, d.clientName)} className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded transition-colors" title="מחק">
-                    🗑
-                  </button>
+                  {d.status === "deleted" ? (
+                    <button onClick={() => handleRestore(d.id, d.clientName)} className="bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 rounded transition-colors" title="שחזר">
+                      ↩️
+                    </button>
+                  ) : (
+                    <button onClick={() => handleDelete(d.id, d.clientName)} className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded transition-colors" title="מחק">
+                      🗑
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -871,10 +953,172 @@ function CompanySettings({ company, onChange }) {
 }
 
 // ═══════════════════════════════════════════════
+//  MODULE 2d – ManagementPanel (Tab 3)
+// ═══════════════════════════════════════════════
+
+function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive }) {
+  const [unlocked, setUnlocked] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState(false);
+  const [backupTaken, setBackupTaken] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleUnlock = () => {
+    if (password === ADMIN_PASSWORD) {
+      setUnlocked(true);
+      setPasswordError(false);
+    } else {
+      setPasswordError(true);
+    }
+  };
+
+  const handleBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const allDocs = await listDocuments(true);
+      const timestamp = getTimestampStr();
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        exportedAtFormatted: timestamp,
+        version: 1,
+        totalDocuments: allDocs.length,
+        documents: allDocs,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sharara_backup_${timestamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      try {
+        await exportBackupToFirestore(timestamp, allDocs);
+        showToast("גיבוי נשמר בהצלחה לענן והורד כמסמך מקומי", "success");
+      } catch {
+        showToast("גיבוי הורד למחשב (אך שמירה לענן נכ� himself, ייתכן שאין חיבור Firebase)", "local");
+      }
+
+      setBackupTaken(true);
+    } catch (err) {
+      showToast("שגיאה בייצוא גיבוי: " + err.message, "error");
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!backupTaken) {
+      showToast("יש לבצע גיבוי לפני איפוס המערכת", "error");
+      return;
+    }
+    if (!window.confirm("האם אתה בטוח שברצונך לאפס את המערכת?\nכל הנתונים יימחקו לצמיתות!")) return;
+    if (!window.confirm("אישור סופי – איפוס ימחק את כל המסמכים.\nהאם להמשיך?")) return;
+
+    setResetLoading(true);
+    try {
+      await resetAllActiveDocuments();
+      showToast("המערכת אופסה בהצלחה", "success");
+      setBackupTaken(false);
+      onRefreshArchive();
+    } catch (err) {
+      showToast("שגיאה באיפוס: " + err.message, "error");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  if (!unlocked) {
+    return (
+      <div className="p-4 max-w-sm mx-auto mt-8">
+        <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+          <h3 className="text-sm font-bold text-gray-700 mb-4 text-center">גישה לפאנל הניהול</h3>
+          <p className="text-xs text-gray-500 mb-4 text-center">הזן סיסמה כדי לגשת להגדרות הניהול</p>
+          <input
+            type="password"
+            placeholder="סיסמה"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+            className="form-input text-center mb-2"
+            autoFocus
+          />
+          {passwordError && (
+            <p className="text-red-500 text-xs text-center mb-2">סיסמה שגויה</p>
+          )}
+          <button
+            onClick={handleUnlock}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded transition-colors"
+          >
+            כניסה
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-gray-700">פאנל ניהול</h3>
+        <button
+          onClick={() => setUnlocked(false)}
+          className="text-xs text-red-500 hover:underline"
+        >
+          נעול
+        </button>
+      </div>
+
+      <CompanySettings company={company} onChange={onCompanyChange} />
+
+      <hr className="my-6 border-gray-200" />
+
+      <h3 className="text-sm font-bold text-gray-700 mb-3">גיבוי ואיפוס</h3>
+
+      <button
+        onClick={handleBackup}
+        disabled={backupLoading}
+        className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white text-xs font-semibold py-2 rounded transition-colors mb-2"
+      >
+        {backupLoading ? "מייצא..." : "שמור גיבוי לפני איפוס"}
+      </button>
+
+      <button
+        onClick={handleReset}
+        disabled={!backupTaken || resetLoading}
+        className={`w-full text-xs font-semibold py-2 rounded transition-colors ${
+          backupTaken && !resetLoading
+            ? "bg-red-600 hover:bg-red-700 text-white"
+            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+        }`}
+      >
+        {resetLoading ? "מאפס..." : "איפוס מערכת"}
+      </button>
+      {!backupTaken && (
+        <p className="text-[10px] text-red-500 mt-1">יש לבצע גיבוי תחילה</p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
 //  MAIN APP
 // ═══════════════════════════════════════════════
 
 const COMPANY_STORAGE_KEY = "sharara_company_settings";
+const ADMIN_PASSWORD = "Admin123";
+
+function getTimestampStr() {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yyyy = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const min = String(now.getMinutes()).padStart(2, "0");
+  return `${dd}-${mm}-${yyyy}_${hh}-${min}`;
+}
 
 function loadCompany() {
   try {
@@ -937,17 +1181,18 @@ export default function App() {
 
     try {
       const snapshot = deepCopyDoc(doc);
-      const result = await saveNewDocument(snapshot);
+      const companySnap = deepCopyCompany(company);
+      const result = await saveNewDocument(snapshot, companySnap);
       harvestCustomerProject(snapshot.clientName, snapshot.projectName, snapshot.contactPhone, snapshot.contactFax);
-      const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
-      if (counterKey) incrementSerial(counterKey);
       if (result.source === "local") {
+        const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
+        if (counterKey) incrementSerial(counterKey);
         showToast(
-          "המסמך נשמר בהצלחה באופן מקומי בדפדפן (Firebase לא מוגדר/לא זמין)",
+          "המסמך נשמר בהצלחה באופן מקומי בדפדפן",
           "local"
         );
       } else {
-        showToast("המסמך נשמר בהצלחה בענן", "success");
+        showToast("המסמך נשמר בהצלחה בענן (מס' " + (result.serial || "") + ")", "success");
       }
       setArchiveRefreshKey((k) => k + 1);
       setDoc(freshDocState());
@@ -957,33 +1202,17 @@ export default function App() {
     } finally {
       setSaving(false);
     }
-  }, [doc, saving, showToast]);
+  }, [doc, saving, showToast, company]);
 
   const handlePreviewArchive = useCallback((archiveEntry) => {
-    const loaded = {
-      docType: archiveEntry.docType || "quote",
-      customDocType: archiveEntry.customDocType || "",
-      useCustomDocType: archiveEntry.useCustomDocType || false,
-      serialNumber: archiveEntry.serialNumber || "",
-      clientName: archiveEntry.clientName || "",
-      projectName: archiveEntry.projectName || "",
-      contactPerson: archiveEntry.contactPerson || "",
-      contactPhone: archiveEntry.contactPhone || "",
-      contactFax: archiveEntry.contactFax || "",
-      date: archiveEntry.date || new Date().toISOString().split("T")[0],
-      vatRate: archiveEntry.vatRate ?? 17,
-      customVat: archiveEntry.customVat || "",
-      items: Array.isArray(archiveEntry.items) && archiveEntry.items.length > 0
-        ? archiveEntry.items.map((it) => ({
-            id: it.id || crypto.randomUUID(),
-            description: it.description || "",
-            unit: it.unit || "יח'",
-            quantity: Number(it.quantity) || 1,
-            unitPrice: Number(it.unitPrice) || 0,
-          }))
-        : [freshItem()],
-      notes: archiveEntry.notes || "",
-    };
+    const loaded = normalizeDoc(
+      archiveEntry,
+      archiveEntry.id,
+      archiveEntry.source || "firebase"
+    );
+    if (!loaded.items || loaded.items.length === 0) {
+      loaded.items = [freshItem()];
+    }
 
     setDoc(loaded);
     setPreviewOverride(loaded);
@@ -993,7 +1222,11 @@ export default function App() {
   }, []);
 
   const handleLoadToForm = useCallback((archiveEntry) => {
-    const loaded = { ...archiveEntry };
+    const loaded = normalizeDoc(
+      archiveEntry,
+      archiveEntry.id,
+      archiveEntry.source || "firebase"
+    );
     delete loaded.id;
     delete loaded.docId;
     delete loaded.createdAt;
@@ -1002,18 +1235,6 @@ export default function App() {
     if (!loaded.items || loaded.items.length === 0) {
       loaded.items = [freshItem()];
     }
-    loaded.items = loaded.items.map((it) => ({
-      ...it,
-      id: it.id || crypto.randomUUID(),
-      description: it.description || "",
-      unit: it.unit || "יח'",
-      quantity: Number(it.quantity) || 1,
-      unitPrice: Number(it.unitPrice) || 0,
-    }));
-    loaded.notes = loaded.notes || "";
-    loaded.customVat = loaded.customVat || "";
-    loaded.customDocType = loaded.customDocType || "";
-    loaded.useCustomDocType = loaded.useCustomDocType || false;
     setDoc(loaded);
     setPreviewOverride(null);
     setActiveTab("new");
@@ -1098,14 +1319,14 @@ export default function App() {
               ארכיון ומעקב
             </button>
             <button
-              onClick={() => setActiveTab("settings")}
+              onClick={() => setActiveTab("management")}
               className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-                activeTab === "settings"
+                activeTab === "management"
                   ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              הגדרות חברה
+              ניהול
             </button>
           </div>
 
@@ -1128,8 +1349,13 @@ export default function App() {
                 refreshKey={archiveRefreshKey}
               />
             )}
-            {activeTab === "settings" && (
-              <CompanySettings company={company} onChange={setCompany} />
+            {activeTab === "management" && (
+              <ManagementPanel
+                company={company}
+                onCompanyChange={setCompany}
+                showToast={showToast}
+                onRefreshArchive={() => setArchiveRefreshKey((k) => k + 1)}
+              />
             )}
           </div>
         </aside>
