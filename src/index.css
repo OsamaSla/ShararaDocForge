@@ -1,0 +1,584 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  background: #eef1f5;
+  direction: rtl;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #b0b8c4; border-radius: 3px; }
+
+/* ═══════════════════════════════════════════════
+   PRINT SHEET – A4 Professional Letterhead
+   ═══════════════════════════════════════════════ */
+.print-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  background: white;
+  margin: 0 auto;
+  padding: 12mm 16mm 18mm 16mm;
+  direction: rtl;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  color: #1a1a1a;
+  line-height: 1.5;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.10);
+  position: relative;
+}
+
+/* ── Letterhead Header ── */
+.letterhead { border-bottom: 3px double #1a2744; padding-bottom: 10px; margin-bottom: 12px; }
+.letterhead-main { position: relative; text-align: center; }
+.letterhead-titles { text-align: center; }
+.letterhead-titles h1 { font-size: 20px; font-weight: 800; margin: 0 0 2px 0; color: #1a2744; }
+.letterhead-titles h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px 0; color: #2c4a6e; }
+.letterhead-trade-wrap { position: relative; display: inline-block; }
+.letterhead-logo { position: absolute; right: 0; bottom: calc(100% + 2px); width: 100px; height: auto; object-fit: contain; }
+.letterhead-trade { font-size: 9px; color: #555; line-height: 1.5; }
+.letterhead-contact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 8px;
+  font-size: 9.5px;
+  color: #444;
+}
+.letterhead-contact span { white-space: nowrap; }
+.letterhead-contact .dir-ltr { direction: ltr; unicode-bidi: isolate; }
+
+/* ── Document Title ── */
+.doc-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a2744;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 6px;
+  margin: 10px 0 4px 0;
+  letter-spacing: 0.5px;
+}
+
+/* ── Document Serial Number ── */
+.doc-serial {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2744;
+  margin-top: 5px;
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+  direction: rtl;
+}
+
+/* ── Client Meta Block ── */
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 24px; font-size: 11.5px; margin-bottom: 14px; }
+.meta-grid .meta-label { font-weight: 700; min-width: 80px; display: inline-block; }
+.meta-grid .meta-dash { color: #aaa; }
+
+/* ═══════════════════════════════════════════════
+   ITEMS TABLE – Sharp Structural Gridlines
+   ═══════════════════════════════════════════════ */
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin: 0 0 10px 0;
+  border: 2px solid #000000;
+}
+.items-table thead {
+  background: #1a2744;
+  color: white;
+}
+.items-table th {
+  padding: 6px 7px;
+  font-weight: 600;
+  font-size: 10.5px;
+  text-align: right;
+  border: 1px solid #000000;
+  border-bottom: 2px solid #000000;
+}
+.items-table td {
+  padding: 5px 7px;
+  border: 1px solid #000000;
+}
+.items-table tbody tr:nth-child(even) { background: #f7f9fb; }
+.items-table .col-num { width: 5%; text-align: center; }
+.items-table .col-desc { width: 50%; }
+.items-table .col-unit { width: 10%; text-align: center; }
+.items-table .col-qty { width: 10%; text-align: center; }
+.items-table .col-price { width: 10%; text-align: center; }
+.items-table .col-total { width: 15%; text-align: center; }
+.items-table td.num-cell { direction: ltr; unicode-bidi: isolate; text-align: center; }
+.items-table .empty-row td { color: #ccc; font-style: italic; text-align: center; border-color: #000000; }
+
+/* ── Totals Card ── */
+.totals-card { display: flex; justify-content: flex-end; margin: 0 0 14px 0; }
+.totals-card-inner {
+  width: 260px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 11.5px;
+}
+.totals-card-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 10px;
+  border-bottom: 1px solid #eee;
+}
+.totals-card-row.grand {
+  background: #1a2744;
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+  border-bottom: none;
+}
+
+/* ── Notes Section (A4 Preview) ── */
+.notes-section {
+  border-top: 1px solid #ccc;
+  padding-top: 8px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-size: 9.5px;
+  color: #333;
+  line-height: 1.6;
+}
+.notes-section .notes-label {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.notes-section .notes-content {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* ── Legal Terms ── */
+.legal-section {
+  font-size: 9px;
+  color: #555;
+  line-height: 1.6;
+  border-top: 1px solid #ccc;
+  padding-top: 8px;
+  margin-top: 6px;
+}
+.legal-section p { margin: 2px 0; }
+
+/* ── Signature Block ── */
+.signature-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 24px;
+  padding-top: 10px;
+}
+.sig-box {
+  width: 44%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.sig-img-wrapper {
+  width: 180px;
+  height: 90px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+.sig-img-wrapper img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.sig-line {
+  border-top: 1px solid #000;
+  margin-top: 0;
+  padding-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  position: relative;
+}
+.sig-client-label {
+  position: absolute;
+  top: -16px;
+  left: 0;
+  right: 0;
+  font-size: 9px;
+  font-weight: 400;
+  color: #666;
+}
+.sig-client-label {
+  position: absolute;
+  top: -16px;
+  left: 0;
+  right: 0;
+  font-size: 9px;
+  font-weight: 400;
+  color: #666;
+}
+
+/* ═══════════════════════════════════════════════
+   FORM UTILITIES
+   ═══════════════════════════════════════════════ */
+.dir-ltr { direction: ltr; unicode-bidi: isolate; }
+.form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 3px;
+}
+.form-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+/* ── Settings Panel ── */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.settings-field { display: flex; flex-direction: column; gap: 3px; }
+.settings-field.full-width { grid-column: 1 / -1; }
+
+/* ── Notes Textarea ── */
+.notes-textarea {
+  min-height: 100px;
+  resize: vertical;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* ── Validation Error Styling ── */
+.form-input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15) !important;
+}
+.validation-hint {
+  font-size: 10px;
+  color: #ef4444;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+/* ── Serial Number Input ── */
+.serial-number-input {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  background: #f9fafb;
+}
+
+/* ── Disabled Button State ── */
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+button:not(:disabled):hover {
+  filter: brightness(0.95);
+}
+
+/* ═══════════════════════════════════════════════
+   TOAST NOTIFICATION
+   ═══════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  background: #1a2744;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+  text-align: center;
+  max-width: 480px;
+}
+.toast.local {
+  background: #b45309;
+}
+.toast.success {
+  background: #047857;
+}
+.toast.error {
+  background: #dc2626;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════
+   VAT INPUT
+   ═══════════════════════════════════════════════ */
+.vat-custom-input {
+  width: 56px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.vat-custom-input:focus {
+  border-color: #3b82f6;
+}
+
+/* ═══════════════════════════════════════════════
+   SEARCHABLE DROPDOWN
+   ═══════════════════════════════════════════════ */
+.sd-container {
+  position: relative;
+  width: 100%;
+}
+.sd-trigger {
+  position: relative;
+  cursor: pointer;
+}
+.sd-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 28px 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: white;
+  direction: rtl;
+  text-align: right;
+}
+.sd-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.sd-chevron {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: #6b7280;
+  pointer-events: none;
+  transition: transform 0.15s;
+}
+.sd-chevron-open {
+  transform: translateY(-50%) rotate(180deg);
+}
+.sd-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 50;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  direction: rtl;
+}
+.sd-option {
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #374151;
+  transition: background 0.1s;
+  text-align: right;
+}
+.sd-option:hover {
+  background: #f3f4f6;
+}
+.sd-option-active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+.sd-highlight {
+  color: #2563eb;
+  font-weight: 600;
+}
+.sd-empty {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+}
+.sd-option-create {
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sd-option-create:hover {
+  background-color: #eff6ff;
+}
+.sd-create-icon {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.sd-container.form-input-error .sd-input {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15) !important;
+}
+
+/* ═══════════════════════════════════════════════
+   PRINT STYLES
+   ═══════════════════════════════════════════════ */
+@media print {
+  /* ── Hide ALL non-print elements ── */
+  .no-print,
+  .editor-panel,
+  .archive-panel,
+  .app-header,
+  .app-tabs,
+  .toast-container,
+  .validation-hint,
+  .sd-container,
+  button,
+  input:not(.print-sheet input),
+  select:not(.print-sheet select),
+  textarea:not(.print-sheet textarea) {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .preview-panel {
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+  }
+
+  .print-sheet {
+    width: 100% !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 12mm 16mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-inside: avoid;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  * { direction: rtl !important; }
+
+  .items-table thead {
+    background: #1a2744 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .items-table th {
+    border-color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .items-table td {
+    border-color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .items-table {
+    border-color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .items-table .grand-total-row {
+    background: #1a2744 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .items-table .totals-row {
+    background: #eef1f5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .totals-card-row.grand {
+    background: #1a2744 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .totals-card-inner {
+    border-color: #999 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .totals-card-row {
+    border-color: #ddd !important;
+  }
+
+  .letterhead {
+    border-bottom-color: #1a2744 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .doc-title {
+    border-bottom-color: #ccc !important;
+  }
+  .legal-section {
+    border-top-color: #ccc !important;
+  }
+  .sig-line {
+    border-top-color: #000 !important;
+  }
+  .sig-img-wrapper img,
+  .logo-placeholder img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
