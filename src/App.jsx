@@ -998,7 +998,7 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
         await exportBackupToFirestore(timestamp, allDocs);
         showToast("גיבוי נשמר בהצלחה לענן והורד כמסמך מקומי", "success");
       } catch {
-        showToast("גיבוי הורד למחשב (אך שמירה לענן נכ� himself, ייתכן שאין חיבור Firebase)", "local");
+        showToast("גיבוי הורד למחשב (אך שמירה לענן נכשלה, ייתכן שאין חיבור Firebase)", "local");
       }
 
       setBackupTaken(true);

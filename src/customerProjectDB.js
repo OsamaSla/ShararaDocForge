@@ -94,27 +94,3 @@ export function harvestCustomerProject(clientName, projectName, phone, fax) {
 
   writeDB(db);
 }
-
-export function removeCustomerProject(customerName, projectName) {
-  if (!customerName || !customerName.trim()) return;
-
-  const db = readDB();
-  const idx = db.findIndex(
-    (c) => c.name.trim().toLowerCase() === customerName.trim().toLowerCase()
-  );
-
-  if (idx === -1) return;
-
-  if (projectName && projectName.trim()) {
-    db[idx].projects = db[idx].projects.filter(
-      (p) => p.trim().toLowerCase() !== projectName.trim().toLowerCase()
-    );
-    if (db[idx].projects.length === 0) {
-      db.splice(idx, 1);
-    }
-  } else {
-    db.splice(idx, 1);
-  }
-
-  writeDB(db);
-}

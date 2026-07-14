@@ -35,12 +35,6 @@ export function incrementSerial(docType) {
   writeCounters(counters);
 }
 
-export function getCurrentSerial(docType) {
-  if (!docType) return 0;
-  const counters = readCounters();
-  return counters[docType] || 0;
-}
-
 export function setSerial(docType, value) {
   if (!docType) return;
   const num = parseInt(value, 10);
@@ -52,9 +46,4 @@ export function setSerial(docType, value) {
 
 export function getAllCounters() {
   return readCounters();
-}
-
-export function formatSerial(num) {
-  if (!num || num < 1) return "";
-  return "#" + String(num).padStart(4, "0");
 }

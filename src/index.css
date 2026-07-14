@@ -54,20 +54,6 @@ body {
 }
 .letterhead-contact span { white-space: nowrap; }
 .letterhead-contact .dir-ltr { direction: ltr; unicode-bidi: isolate; }
-.logo-placeholder {
-  width: 140px;
-  height: 140px;
-  border: 2px dashed #bbb;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  color: #999;
-  text-align: center;
-  flex-shrink: 0;
-  overflow: hidden;
-}
 
 /* ── Document Title ── */
 .doc-title {
@@ -132,9 +118,6 @@ body {
 .items-table .col-price { width: 10%; text-align: center; }
 .items-table .col-total { width: 15%; text-align: center; }
 .items-table td.num-cell { direction: ltr; unicode-bidi: isolate; text-align: center; }
-.items-table .totals-row { background: #eef1f5 !important; font-weight: 600; }
-.items-table .grand-total-row { background: #1a2744 !important; color: white !important; font-weight: 700; font-size: 12px; }
-.items-table .grand-total-row td { padding: 7px; border-color: #1a2744; }
 .items-table .empty-row td { color: #ccc; font-style: italic; text-align: center; border-color: #000000; }
 
 /* ── Totals Card ── */
@@ -235,17 +218,14 @@ body {
   font-weight: 400;
   color: #666;
 }
-.sig-placeholder {
-  width: 180px;
-  height: 90px;
-  border: 1px dashed #bbb;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.sig-client-label {
+  position: absolute;
+  top: -16px;
+  left: 0;
+  right: 0;
   font-size: 9px;
-  color: #aaa;
-  margin: 6px auto 0;
+  font-weight: 400;
+  color: #666;
 }
 
 /* ═══════════════════════════════════════════════
@@ -272,16 +252,6 @@ body {
 .form-input:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-}
-
-/* ── Custom Doc Type Input ── */
-.form-input.custom-doc-type {
-  border-color: #6366f1;
-  background: #faf5ff;
-}
-.form-input.custom-doc-type:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
 }
 
 /* ── Settings Panel ── */
@@ -325,76 +295,6 @@ button:disabled {
 }
 button:not(:disabled):hover {
   filter: brightness(0.95);
-}
-
-/* ── File Upload Zone ── */
-.upload-zone {
-  border: 2px dashed #d1d5db;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: border-color 0.15s;
-  min-height: 80px;
-}
-.upload-zone:hover {
-  border-color: #3b82f6;
-}
-.upload-trigger {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 14px 8px;
-  cursor: pointer;
-  color: #9ca3af;
-  transition: color 0.15s;
-}
-.upload-trigger:hover {
-  color: #3b82f6;
-}
-.upload-icon {
-  font-size: 22px;
-  font-weight: 300;
-  line-height: 1;
-}
-.upload-text {
-  font-size: 10px;
-  font-weight: 500;
-}
-.upload-preview {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  background: #f9fafb;
-}
-.upload-thumb {
-  max-width: 100%;
-  max-height: 64px;
-  object-fit: contain;
-  border-radius: 4px;
-}
-.upload-remove {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #ef4444;
-  color: white;
-  border: none;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-.upload-remove:hover {
-  background: #dc2626;
 }
 
 /* ═══════════════════════════════════════════════
