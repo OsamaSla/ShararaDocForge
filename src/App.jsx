@@ -239,8 +239,8 @@ function DocumentPreview({ company, doc }) {
               <td>{item.description}</td>
               <td className="col-unit">{item.unit}</td>
               <td className="col-qty">{item.quantity}</td>
-              <td className="num-cell">{fmt(item.unitPrice)} ₪</td>
-              <td className="num-cell">{fmt(calcLine(item))} ₪</td>
+              <td className="col-price num-cell">{fmt(item.unitPrice)} ₪</td>
+              <td className="col-total num-cell">{fmt(calcLine(item))} ₪</td>
             </tr>
           ))}
           {filled.length === 0 && (
