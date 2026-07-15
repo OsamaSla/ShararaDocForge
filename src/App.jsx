@@ -678,7 +678,7 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
     copy.customDocType = copy.customDocType || "";
     copy.useCustomDocType = copy.useCustomDocType || false;
     copy.date = new Date().toISOString().split("T")[0];
-    onLoadToForm(copy);
+    onLoadToForm(copy, true);
   };
 
   const formatCreatedAt = (d) => {
@@ -1576,6 +1576,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("new");
   const [previewOverride, setPreviewOverride] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(true);
   const [toast, setToast] = useState(null);
   const [archiveRefreshKey, setArchiveRefreshKey] = useState(0);
   const [showValidation, setShowValidation] = useState(false);
@@ -1640,6 +1641,7 @@ export default function App() {
       }
       setArchiveRefreshKey((k) => k + 1);
       setDoc(freshDocState());
+      setIsDirty(true);
       window.print();
     } catch (err) {
       showToast("שגיאה בשמירה: " + err.message);
@@ -1659,13 +1661,14 @@ export default function App() {
     }
 
     setDoc(loaded);
+    setIsDirty(false);
     setPreviewOverride(loaded);
     setShowValidation(false);
     setValidationErrors({});
     setActiveTab("new");
   }, []);
 
-  const handleLoadToForm = useCallback((archiveEntry) => {
+  const handleLoadToForm = useCallback((archiveEntry, startDirty = false) => {
     const loaded = normalizeDoc(
       archiveEntry,
       archiveEntry.id,
@@ -1680,6 +1683,7 @@ export default function App() {
       loaded.items = [freshItem()];
     }
     setDoc(loaded);
+    setIsDirty(startDirty);
     setPreviewOverride(null);
     setActiveTab("new");
   }, []);
@@ -1721,18 +1725,27 @@ export default function App() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleSaveAndPrint}
-            disabled={saving || isFormInvalid}
-            className={`text-white text-xs font-semibold px-4 py-1.5 rounded transition-colors ${
-              saving || isFormInvalid
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-            }`}
-            title={isFormInvalid ? "נא למלא שם המזמין ולפחות תיאור סעיף אחד" : ""}
-          >
-            {saving ? "שומר..." : "שמירה & הדפסה"}
-          </button>
+          {isDirty ? (
+            <button
+              onClick={handleSaveAndPrint}
+              disabled={saving || isFormInvalid}
+              className={`text-white text-xs font-semibold px-4 py-1.5 rounded transition-colors ${
+                saving || isFormInvalid
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+              title={isFormInvalid ? "נא למלא שם המזמין ולפחות תיאור סעיף אחד" : ""}
+            >
+              {saving ? "שומר..." : "שמור והדפס"}
+            </button>
+          ) : (
+            <button
+              onClick={window.print}
+              className="text-gray-600 hover:text-gray-800 text-xs font-semibold px-4 py-1.5 rounded border border-gray-300 hover:border-gray-400 transition-colors"
+            >
+              הדפס מסמך
+            </button>
+          )}
         </div>
       </header>
 
@@ -1790,7 +1803,7 @@ export default function App() {
               <div className="p-4">
                 <DocumentForm
                   doc={doc}
-                  onChange={setDoc}
+                  onChange={(v) => { setDoc(v); setIsDirty(true); }}
                   showValidation={showValidation}
                   validationErrors={validationErrors}
                 />
