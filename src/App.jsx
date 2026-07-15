@@ -8,9 +8,17 @@ import {
   resetAllActiveDocuments,
   getProjectedSerial,
   normalizeDoc,
+  addCustomerName,
+  deleteCustomerName,
+  addProjectName,
+  deleteProjectName,
+  renameCustomer,
+  renameProject,
+  subscribeCustomers,
+  subscribeProjects,
 } from "./firebase";
-import { getAllCustomers, getProjectsForCustomer, getCustomerDetails, harvestCustomerProject } from "./customerProjectDB";
-import { incrementSerial, getAllCounters, setSerial } from "./serialCounter";
+import { getCustomerDetails, harvestCustomerProject, subscribeToCustomers } from "./customerProjectDB";
+import { incrementSerial, setSerial, subscribeToCounters } from "./serialCounter";
 import SearchableDropdown from "./SearchableDropdown";
 import logoImg from "./logo.png";
 import signatureImg from "./SHARARA SIGNATURE.png";
@@ -314,34 +322,27 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
   const [projectOptions, setProjectOptions] = useState([]);
 
   useEffect(() => {
-    setAllCustomers(getAllCustomers());
-  }, [doc]);
+    const unsub = subscribeCustomers((names) => {
+      setAllCustomers(names);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
-    if (doc.clientName && doc.clientName.trim()) {
-      setProjectOptions(getProjectsForCustomer(doc.clientName));
-    } else {
-      setProjectOptions([]);
-    }
+    if (!doc.clientName) { setProjectOptions([]); return; }
+    const unsub = subscribeProjects(doc.clientName, setProjectOptions);
+    return () => unsub();
   }, [doc.clientName]);
 
   const handleClientChange = (val) => {
     set("clientName", val);
+    set("projectName", "");
     if (val && val.trim()) {
-      const projects = getProjectsForCustomer(val);
-      setProjectOptions(projects);
-      if (projects.length > 0 && !projects.some(
-        (p) => p.toLowerCase() === (doc.projectName || "").toLowerCase()
-      )) {
-        set("projectName", "");
-      }
       const details = getCustomerDetails(val);
       if (details) {
         set("contactPhone", details.phone || "");
         set("contactFax", details.fax || "");
       }
-    } else {
-      setProjectOptions([]);
     }
   };
 
@@ -428,6 +429,7 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             options={allCustomers}
             placeholder="הקלד או בחר שם לקוח..."
             className={`${showValidation && validationErrors?.clientName ? "form-input-error" : ""}`}
+            hideCreate
           />
           {showValidation && validationErrors?.clientName && (
             <p className="validation-hint">שדה חובה - הזן שם המזמין</p>
@@ -439,7 +441,9 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             value={doc.projectName}
             onChange={handleProjectChange}
             options={projectOptions}
-            placeholder={doc.clientName ? "הקלד או בחר פרויקט..." : "בחר לקוח תחילה..."}
+            placeholder="הקלד או בחר פרויקט..."
+            disabled={!doc.clientName}
+            hideCreate
           />
         </div>
         <div>
@@ -821,19 +825,6 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
 
 function CompanySettings({ company, onChange }) {
   const set = (field, val) => onChange((p) => ({ ...p, [field]: val }));
-  const [counters, setCountersState] = useState(getAllCounters());
-
-  const handleCounterChange = (docType, val) => {
-    const num = parseInt(val, 10);
-    if (isNaN(num) || num < 0) return;
-    setSerial(docType, num);
-    setCountersState(getAllCounters());
-  };
-
-  const allDocTypes = [
-    ...DOCUMENT_TYPES.map((t) => ({ key: t.value, label: t.label })),
-  ];
-
   return (
     <div className="p-4">
       <h3 className="text-sm font-bold text-gray-700 mb-4">הגדרות חברה</h3>
@@ -925,29 +916,6 @@ function CompanySettings({ company, onChange }) {
         אפס להגדרות ברירת מחדל
       </button>
 
-      {/* ── Serial Counters ── */}
-      <div className="mt-6 border-t border-gray-200 pt-4">
-        <h3 className="text-sm font-bold text-gray-700 mb-3">מספרי סידוריים</h3>
-        <p className="text-[10px] text-gray-400 mb-3"> הגדר את המספר הבא שיוקצה לכל סוג מסמך</p>
-        <div className="space-y-2">
-          {allDocTypes.map((t) => (
-            <div key={t.key} className="flex items-center gap-3">
-              <label className="form-label w-32 shrink-0 mb-0">{t.label}</label>
-              <input
-                type="number"
-                min="0"
-                value={counters[t.key] || 0}
-                onChange={(e) => handleCounterChange(t.key, e.target.value)}
-                className="form-input w-24 serial-number-input"
-                dir="ltr"
-              />
-              <span className="text-[10px] text-gray-400">
-                הבא: #{String((counters[t.key] || 0) + 1).padStart(4, "0")}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -957,15 +925,68 @@ function CompanySettings({ company, onChange }) {
 // ═══════════════════════════════════════════════
 
 function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive }) {
+  const [adminPassword, setAdminPassword] = useState(() => {
+    try { return localStorage.getItem(PASSWORD_STORAGE_KEY) || "0000"; } catch { return "0000"; }
+  });
   const [unlocked, setUnlocked] = useState(false);
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   const [backupTaken, setBackupTaken] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [showSerialModal, setShowSerialModal] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordChangeMsg, setPasswordChangeMsg] = useState(null);
+
+  const [counters, setCounters] = useState({});
+  const [selectedDocType, setSelectedDocType] = useState(DOCUMENT_TYPES[0].label);
+  const [firestoreSerial, setFirestoreSerial] = useState(null);
+  const [allDocs, setAllDocs] = useState([]);
+
+  useEffect(() => {
+    const unsub = subscribeToCounters((data) => {
+      setCounters(data || {});
+      if (data && data.lastSerialNumber != null) {
+        setFirestoreSerial(data.lastSerialNumber);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    listDocuments(true).then(setAllDocs).catch(() => {});
+  }, []);
+
+  const maxSerialsByType = useMemo(() => {
+    const map = {};
+    allDocs.forEach((d) => {
+      const label = resolveDocLabel(d);
+      const serial = parseInt(d.serialNumber, 10);
+      if (label && !isNaN(serial)) {
+        map[label] = Math.max(map[label] || 0, serial);
+      }
+    });
+    return map;
+  }, [allDocs]);
+
+  const allSerialTypes = useMemo(() => {
+    const map = {};
+    DOCUMENT_TYPES.forEach((t) => { map[t.label] = t.label; });
+    Object.keys(counters).forEach((k) => {
+      if (!map[k] && k !== "lastSerialNumber") map[k] = k;
+    });
+    return Object.entries(map).map(([value, label]) => ({ value, label }));
+  }, [counters]);
+
+  const counterVal = counters[selectedDocType] || 0;
+  const maxSerial = maxSerialsByType[selectedDocType] || 0;
+  const currentCounterVal = Math.max(counterVal, maxSerial);
+  const nextVal = currentCounterVal + 1;
 
   const handleUnlock = () => {
-    if (password === ADMIN_PASSWORD) {
+    if (password === adminPassword) {
       setUnlocked(true);
       setPasswordError(false);
     } else {
@@ -1030,6 +1051,27 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
     }
   };
 
+  const handleChangePassword = () => {
+    if (!newPassword || newPassword.length < 4) {
+      setPasswordChangeMsg({ type: "error", text: "הסיסמה חייבת להכיל לפחות 4 תווים" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeMsg({ type: "error", text: "הסיסמאות אינן תואמות" });
+      return;
+    }
+    try {
+      localStorage.setItem(PASSWORD_STORAGE_KEY, newPassword);
+      setAdminPassword(newPassword);
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordChangeMsg({ type: "success", text: "הסיסמה שונתה בהצלחה" });
+      setTimeout(() => setPasswordChangeMsg(null), 3000);
+    } catch {
+      setPasswordChangeMsg({ type: "error", text: "שגיאה בשמירת הסיסמה" });
+    }
+  };
+
   if (!unlocked) {
     return (
       <div className="p-4 max-w-sm mx-auto mt-8">
@@ -1071,7 +1113,21 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
         </button>
       </div>
 
-      <CompanySettings company={company} onChange={onCompanyChange} />
+      {/* Action Buttons */}
+      <div className="flex flex-col gap-3 mb-6">
+        <button
+          onClick={() => setShowCompanyModal(true)}
+          className="w-full bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-700 font-semibold text-sm py-3 rounded-xl transition-colors shadow-sm"
+        >
+          ✏️ עריכת נתוני החברה
+        </button>
+        <button
+          onClick={() => setShowSerialModal(true)}
+          className="w-full bg-white border-2 border-emerald-200 hover:border-emerald-400 text-emerald-700 font-semibold text-sm py-3 rounded-xl transition-colors shadow-sm"
+        >
+          🔢 מספרים סידוריים
+        </button>
+      </div>
 
       <hr className="my-6 border-gray-200" />
 
@@ -1099,6 +1155,389 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
       {!backupTaken && (
         <p className="text-[10px] text-red-500 mt-1">יש לבצע גיבוי תחילה</p>
       )}
+
+      {/* ── Company Modal ── */}
+      {showCompanyModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowCompanyModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-[520px] max-h-[85vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white flex items-center justify-between p-4 border-b border-gray-200 z-10">
+              <h3 className="text-sm font-bold text-gray-700">עריכת נתוני החברה</h3>
+              <button
+                onClick={() => setShowCompanyModal(false)}
+                className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <CompanySettings company={company} onChange={onCompanyChange} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Serial Counters Modal ── */}
+      {showSerialModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowSerialModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-[440px] p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-700">מספרים סידוריים</h3>
+              <button
+                onClick={() => setShowSerialModal(false)}
+                className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mb-3">בחר סוג מסמך והגדר את המספר הבא שיוקצה</p>
+            <div className="flex items-center gap-3">
+              <select
+                value={selectedDocType}
+                onChange={(e) => setSelectedDocType(e.target.value)}
+                className="form-input flex-1"
+              >
+                {allSerialTypes.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="0"
+                value={currentCounterVal}
+                onChange={(e) => {
+                  const num = parseInt(e.target.value, 10);
+                  if (isNaN(num) || num < 0) return;
+                  setSerial(selectedDocType, num);
+                }}
+                className="form-input w-24 serial-number-input"
+                dir="ltr"
+              />
+              <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                הבא: #{String(nextVal).padStart(4, "0")}
+              </span>
+            </div>
+            {firestoreSerial != null && (
+              <p className="text-[10px] text-gray-400 mt-3">
+                מונה ענן: #{String(firestoreSerial).padStart(6, "0")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Change Password ── */}
+      <hr className="my-6 border-gray-200" />
+      <h3 className="text-sm font-bold text-gray-700 mb-3">שינוי סיסמת כניסה</h3>
+      <div className="space-y-2">
+        <input
+          type="password"
+          placeholder="סיסמה חדשה (לפחות 4 תווים)"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="form-input"
+        />
+        <input
+          type="password"
+          placeholder="אשר סיסמה חדשה"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleChangePassword(); }}
+          className="form-input"
+        />
+        <button
+          onClick={handleChangePassword}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2 rounded transition-colors"
+        >
+          שמור סיסמה חדשה
+        </button>
+        {passwordChangeMsg && (
+          <p className={`text-xs text-center mt-1 ${passwordChangeMsg.type === "success" ? "text-green-600" : "text-red-500"}`}>
+            {passwordChangeMsg.text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════
+//  MODULE 3b – DbManagementPanel
+//  Searchable customer dropdown + inline project list.
+//  Uses Firestore sub-collections for data.
+// ═══════════════════════════════════════════════
+
+function DbManagementPanel() {
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [projects, setProjects] = useState([]);
+
+  const [newCust, setNewCust] = useState("");
+  const [newProj, setNewProj] = useState("");
+
+  const [editingCust, setEditingCust] = useState(null);
+  const [editCustVal, setEditCustVal] = useState("");
+  const [editingProj, setEditingProj] = useState(null);
+  const [editProjVal, setEditProjVal] = useState("");
+
+  const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.localeCompare(b, "he")), [customers]);
+
+  useEffect(() => {
+    const unsub = subscribeCustomers((names) => {
+      setCustomers(names);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (selectedCustomer && customers.length > 0 && !customers.includes(selectedCustomer)) {
+      setSelectedCustomer("");
+    }
+  }, [customers, selectedCustomer]);
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setProjects([]);
+      return;
+    }
+    const unsub = subscribeProjects(selectedCustomer, (projNames) => {
+      setProjects(projNames);
+    });
+    return () => unsub();
+  }, [selectedCustomer]);
+
+  const handleAddCustomer = async () => {
+    const name = newCust.trim();
+    if (!name) return;
+    try {
+      await addCustomerName(name);
+      setNewCust("");
+      setSelectedCustomer(name);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteCustomer = async (name) => {
+    if (!window.confirm(`האם אתה בטוח שברצונך למחוק את הלקוח "${name}"?\nכל הפרויקטים המשויכים אליו יימחקו גם כן.`)) return;
+    if (!window.confirm(`אזהרה סופית: מחיקת "${name}" היא פעולה בלתי הפיכה. האם להמשיך?`)) return;
+    try {
+      await deleteCustomerName(name);
+      if (selectedCustomer === name) setSelectedCustomer("");
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleRenameCustomer = async (oldName) => {
+    const newName = editCustVal.trim();
+    if (!newName || newName === oldName) {
+      setEditingCust(null);
+      return;
+    }
+    try {
+      await renameCustomer(oldName, newName);
+      if (selectedCustomer === oldName) setSelectedCustomer(newName);
+    } catch (e) {
+      alert(e.message);
+    }
+    setEditingCust(null);
+  };
+
+  const handleAddProject = async () => {
+    const name = newProj.trim();
+    if (!name || !selectedCustomer) return;
+    try {
+      await addProjectName(name, selectedCustomer);
+      setNewProj("");
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteProject = async (name) => {
+    if (!window.confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${name}"?`)) return;
+    if (!window.confirm(`אזהרה סופית: מחיקת הפרויקט "${name}" מבוצעת לצמיתות. האם להמשיך?`)) return;
+    try {
+      await deleteProjectName(name, selectedCustomer);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleRenameProject = async (oldName) => {
+    const newName = editProjVal.trim();
+    if (!newName || newName === oldName) {
+      setEditingProj(null);
+      return;
+    }
+    try {
+      await renameProject(oldName, newName, selectedCustomer);
+    } catch (e) {
+      alert(e.message);
+    }
+    setEditingProj(null);
+  };
+
+  return (
+    <div dir="rtl" className="w-full mx-auto">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <h4 className="text-sm font-bold text-gray-700 mb-4">לקוחות ופרויקטים ({customers.length})</h4>
+
+        {/* ── Add Customer Input ── */}
+        <div className="grid grid-cols-[1fr_auto] gap-2 w-full mb-4">
+          <input
+            type="text"
+            placeholder="שם לקוח חדש..."
+            value={newCust}
+            onChange={(e) => setNewCust(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleAddCustomer(); }}
+            className="min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={handleAddCustomer}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shrink-0 whitespace-nowrap"
+          >
+            + הוסף לקוח
+          </button>
+        </div>
+
+        {/* ── Searchable Customer Dropdown ── */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex-1 min-w-0">
+            <SearchableDropdown
+              value={selectedCustomer}
+              onChange={setSelectedCustomer}
+              options={sortedCustomers}
+              placeholder="חפש לקוח..."
+              className="w-full"
+            />
+          </div>
+          {selectedCustomer && (
+            <div className="flex items-center gap-1 shrink-0">
+              {editingCust === selectedCustomer ? (
+                <div className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1">
+                  <input
+                    autoFocus
+                    value={editCustVal}
+                    onChange={(e) => setEditCustVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRenameCustomer(selectedCustomer);
+                      if (e.key === "Escape") setEditingCust(null);
+                    }}
+                    className="border border-blue-300 rounded px-2 py-1 text-xs w-28 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button onClick={() => handleRenameCustomer(selectedCustomer)} className="text-green-600 hover:text-green-800 text-xs font-semibold px-1 py-1">✓</button>
+                  <button onClick={() => setEditingCust(null)} className="text-gray-400 hover:text-gray-600 text-xs px-1 py-1">✕</button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setEditingCust(selectedCustomer); setEditCustVal(selectedCustomer); }}
+                    className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                    title="ערוך לקוח"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCustomer(selectedCustomer)}
+                    className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    title="מחק לקוח"
+                  >
+                    ✕
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Projects Section ── */}
+        <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50/30 w-full">
+          {!selectedCustomer ? (
+            <p className="text-gray-400 text-xs text-center py-8">בחר לקוח מהרשימה כדי לנהל את הפרויקטים שלו</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {projects.length === 0 ? (
+                <p className="text-gray-400 text-xs text-center py-6">אין פרויקטים ללקוח זה</p>
+              ) : (
+                projects.map((p) => (
+                  <div key={p} className="px-4 py-2.5">
+                    {editingProj === p ? (
+                      <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2">
+                        <input
+                          autoFocus
+                          value={editProjVal}
+                          onChange={(e) => setEditProjVal(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameProject(p);
+                            if (e.key === "Escape") setEditingProj(null);
+                          }}
+                          className="flex-1 border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <button onClick={() => handleRenameProject(p)} className="text-green-600 hover:text-green-800 text-xs font-semibold px-2 py-1 shrink-0">✓</button>
+                        <button onClick={() => setEditingProj(null)} className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1 shrink-0">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between group/proj">
+                        <span className="text-sm text-gray-700">{p}</span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover/proj:opacity-100 transition-opacity shrink-0">
+                          <button
+                            onClick={() => { setEditingProj(p); setEditProjVal(p); }}
+                            className="text-gray-400 hover:text-blue-600 p-1 transition-colors"
+                            title="ערוך"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProject(p)}
+                            className="text-gray-400 hover:text-red-600 p-1 transition-colors"
+                            title="מחק"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+
+              {/* ── Add Project ── */}
+              <div className="px-4 py-3 bg-gray-50/80">
+                <div className="grid grid-cols-[1fr_auto] gap-2 w-full">
+                  <input
+                    type="text"
+                    placeholder="הוסף פרויקט ללקוח זה..."
+                    value={newProj}
+                    onChange={(e) => setNewProj(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAddProject(); }}
+                    className="min-w-0 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={handleAddProject}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap"
+                  >
+                    + הוסף
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1108,7 +1547,7 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
 // ═══════════════════════════════════════════════
 
 const COMPANY_STORAGE_KEY = "sharara_company_settings";
-const ADMIN_PASSWORD = "Admin123";
+const PASSWORD_STORAGE_KEY = "sharara_admin_password";
 
 function getTimestampStr() {
   const now = new Date();
@@ -1159,6 +1598,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const unsub = subscribeToCustomers();
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(COMPANY_STORAGE_KEY, JSON.stringify(company));
     } catch {}
@@ -1183,10 +1627,10 @@ export default function App() {
       const snapshot = deepCopyDoc(doc);
       const companySnap = deepCopyCompany(company);
       const result = await saveNewDocument(snapshot, companySnap);
-      harvestCustomerProject(snapshot.clientName, snapshot.projectName, snapshot.contactPhone, snapshot.contactFax);
+      harvestCustomerProject(snapshot.clientName, snapshot.projectName, snapshot.contactPhone, snapshot.contactFax).catch(() => {});
       if (result.source === "local") {
         const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
-        if (counterKey) incrementSerial(counterKey);
+        if (counterKey) incrementSerial(counterKey).catch(() => {});
         showToast(
           "המסמך נשמר בהצלחה באופן מקומי בדפדפן",
           "local"
@@ -1319,6 +1763,16 @@ export default function App() {
               ארכיון ומעקב
             </button>
             <button
+              onClick={() => setActiveTab("database")}
+              className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                activeTab === "database"
+                  ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              ניהול מאגרים
+            </button>
+            <button
               onClick={() => setActiveTab("management")}
               className={`flex-1 py-2 text-xs font-semibold transition-colors ${
                 activeTab === "management"
@@ -1348,6 +1802,11 @@ export default function App() {
                 onPreview={handlePreviewArchive}
                 refreshKey={archiveRefreshKey}
               />
+            )}
+            {activeTab === "database" && (
+              <div className="p-6">
+                <DbManagementPanel />
+              </div>
             )}
             {activeTab === "management" && (
               <ManagementPanel

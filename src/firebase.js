@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   runTransaction,
   writeBatch,
+  onSnapshot,
 } from "firebase/firestore";
 import {
   getAuth,
@@ -432,4 +433,311 @@ export async function resetAllActiveDocuments() {
   } catch {}
 }
 
-export { DOCUMENTS_COLLECTION, db, serverTimestamp };
+// ═══════════════════════════════════════════════
+//  CUSTOMER / PROJECT MANAGEMENT (Firestore Sync)
+//  Parent-Child schema:
+//    /customers/{customerName}       — { name }
+//    /customers/{customerName}/projects/{projectName}  — { name }
+//  Historical documents store names as plain strings
+//  and are never affected by list changes.
+// ═══════════════════════════════════════════════
+const CUSTOMERS_COLLECTION = "customers";
+const PROJECTS_COLLECTION = "projects";
+
+export async function listCustomerNames() {
+  if (!firebaseAvailable || !db) return [];
+  await ensureAuthenticated();
+  try {
+    const q = query(collection(db, CUSTOMERS_COLLECTION), orderBy("name"));
+    const snapshot = await withTimeout(getDocs(q), 15000, "Firestore customers");
+    return snapshot.docs.map((d) => d.data().name);
+  } catch (e) {
+    console.warn("listCustomerNames failed:", describeError(e, "לקוחות"));
+    return [];
+  }
+}
+
+/** Returns projects stored under /customers/{customerName}/projects */
+export async function listProjectNames(customerName) {
+  if (!firebaseAvailable || !db) return [];
+  if (!customerName) return [];
+  await ensureAuthenticated();
+  try {
+    const col = collection(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION);
+    const q = query(col, orderBy("name"));
+    const snapshot = await withTimeout(getDocs(q), 15000, "Firestore projects");
+    return snapshot.docs.map((d) => d.data().name);
+  } catch (e) {
+    console.warn("listProjectNames failed:", describeError(e, "פרויקטים"));
+    return [];
+  }
+}
+
+export async function addCustomerName(name) {
+  if (!firebaseAvailable || !db) return;
+  await ensureAuthenticated();
+  try {
+    await withTimeout(
+      setDoc(doc(db, CUSTOMERS_COLLECTION, name), { name }),
+      15000,
+      "Firestore"
+    );
+  } catch (e) {
+    throw new Error(describeError(e, "הוספת לקוח"));
+  }
+}
+
+/** Adds a project under /customers/{customerName}/projects/{name} */
+export async function addProjectName(name, customerName) {
+  if (!firebaseAvailable || !db) return;
+  if (!customerName) throw new Error("יש לבחור לקוח לפני הוספת פרויקט");
+  await ensureAuthenticated();
+  try {
+    const ref = doc(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION, name);
+    await withTimeout(setDoc(ref, { name }), 15000, "Firestore");
+  } catch (e) {
+    throw new Error(describeError(e, "הוספת פרויקט"));
+  }
+}
+
+export async function deleteCustomerName(name) {
+  if (!firebaseAvailable || !db) return;
+  await ensureAuthenticated();
+  try {
+    await withTimeout(
+      deleteDoc(doc(db, CUSTOMERS_COLLECTION, name)),
+      15000,
+      "Firestore"
+    );
+  } catch (e) {
+    throw new Error(describeError(e, "מחיקת לקוח"));
+  }
+}
+
+/** Removes a project from /customers/{customerName}/projects/{name} */
+export async function deleteProjectName(name, customerName) {
+  if (!firebaseAvailable || !db) return;
+  if (!customerName) throw new Error("יש לבחור לקוח");
+  await ensureAuthenticated();
+  try {
+    const ref = doc(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION, name);
+    await withTimeout(deleteDoc(ref), 15000, "Firestore");
+  } catch (e) {
+    throw new Error(describeError(e, "מחיקת פרויקט"));
+  }
+}
+
+/** Renames a customer: creates new doc, copies projects, deletes old */
+export async function renameCustomer(oldName, newName) {
+  if (!firebaseAvailable || !db) return;
+  if (!oldName || !newName || oldName === newName) return;
+  await ensureAuthenticated();
+  try {
+    const oldRef = doc(db, CUSTOMERS_COLLECTION, oldName);
+    const newRef = doc(db, CUSTOMERS_COLLECTION, newName);
+    const oldSnap = await withTimeout(getDoc(oldRef), 15000, "Firestore");
+    if (oldSnap.exists()) {
+      await withTimeout(setDoc(newRef, { name: newName, phone: oldSnap.data().phone || "", fax: oldSnap.data().fax || "" }, { merge: true }), 15000, "Firestore");
+    }
+    const projectsCol = collection(db, CUSTOMERS_COLLECTION, oldName, PROJECTS_COLLECTION);
+    const projectsSnap = await withTimeout(getDocs(projectsCol), 15000, "Firestore");
+    const batch = writeBatch(db);
+    projectsSnap.docs.forEach((d) => {
+      batch.set(doc(db, CUSTOMERS_COLLECTION, newName, PROJECTS_COLLECTION, d.id), d.data());
+      batch.delete(d.ref);
+    });
+    batch.delete(oldRef);
+    await batch.commit();
+  } catch (e) {
+    throw new Error(describeError(e, "שינוי שם לקוח"));
+  }
+}
+
+/** Renames a project under a customer */
+export async function renameProject(oldName, newName, customerName) {
+  if (!firebaseAvailable || !db) return;
+  if (!oldName || !newName || oldName === newName || !customerName) return;
+  await ensureAuthenticated();
+  try {
+    const oldRef = doc(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION, oldName);
+    const newRef = doc(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION, newName);
+    const oldSnap = await withTimeout(getDoc(oldRef), 15000, "Firestore");
+    if (oldSnap.exists()) {
+      await withTimeout(setDoc(newRef, { name: newName }, { merge: true }), 15000, "Firestore");
+      await withTimeout(deleteDoc(oldRef), 15000, "Firestore");
+    }
+  } catch (e) {
+    throw new Error(describeError(e, "שינוי שם פרויקט"));
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  ONE-TIME MIGRATION: populate /customers and
+//  sub-collections from historical document fields.
+//  Runs automatically on first subscribeCustomers
+//  call. Idempotent (safe to re-run, uses merge).
+// ═══════════════════════════════════════════════
+export async function migrateCustomerProjectCollections() {
+  if (!firebaseAvailable || !db) return { customers: 0, projects: 0 };
+  await ensureAuthenticated();
+
+  // Fetch all documents from the main collection
+  const docsSnap = await withTimeout(
+    getDocs(query(collection(db, DOCUMENTS_COLLECTION))),
+    60000,
+    "Firestore migration scan"
+  );
+
+  // Map: customerName → Set of projectNames
+  const customerProjects = new Map();
+
+  docsSnap.docs.forEach((d) => {
+    const data = d.data();
+    if (data.status === "deleted") return;
+    const clientName =
+      data.clientName && typeof data.clientName === "string"
+        ? data.clientName.trim()
+        : "";
+    const projectName =
+      data.projectName && typeof data.projectName === "string"
+        ? data.projectName.trim()
+        : "";
+    if (clientName) {
+      if (!customerProjects.has(clientName)) {
+        customerProjects.set(clientName, new Set());
+      }
+      if (projectName) {
+        customerProjects.get(clientName).add(projectName);
+      }
+    }
+  });
+
+  if (customerProjects.size === 0) {
+    return { customers: 0, projects: 0 };
+  }
+
+  // Build all operations, then write in chunks of 500
+  const ops = [];
+  customerProjects.forEach((projects, customerName) => {
+    ops.push({ type: "set", ref: doc(db, CUSTOMERS_COLLECTION, customerName), data: { name: customerName } });
+    projects.forEach((projectName) => {
+      const ref = doc(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION, projectName);
+      ops.push({ type: "set", ref, data: { name: projectName } });
+    });
+  });
+
+  for (let i = 0; i < ops.length; i += 500) {
+    const chunk = ops.slice(i, i + 500);
+    const batch = writeBatch(db);
+    chunk.forEach((op) => batch.set(op.ref, op.data, { merge: true }));
+    await batch.commit();
+  }
+
+  let totalProjects = 0;
+  customerProjects.forEach((p) => { totalProjects += p.size; });
+  return { customers: customerProjects.size, projects: totalProjects };
+}
+
+// ═══════════════════════════════════════════════
+//  REAL-TIME SUBSCRIBERS (onSnapshot)
+//  Each returns an unsubscribe function.
+//  Auth is ensured before the listener is attached.
+//  Auto-migration runs once per session if
+//  customers collection is empty.
+// ═══════════════════════════════════════════════
+
+function waitForFirebase() {
+  if (firebaseAvailable && db) return Promise.resolve();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (firebaseAvailable && db) resolve();
+      else setTimeout(check, 100);
+    };
+    check();
+  });
+}
+
+let migrationDone = false;
+
+export function subscribeCustomers(onData) {
+  let unsub = () => {};
+  let cancelled = false;
+
+  (async () => {
+    await waitForFirebase();
+    if (cancelled) return;
+    try {
+      await ensureAuthenticated();
+    } catch {
+      onData([]);
+      return;
+    }
+    if (cancelled || !db) { onData([]); return; }
+
+    try {
+      if (!migrationDone) {
+        await migrateCustomerProjectCollections();
+        migrationDone = true;
+      }
+    } catch (err) {
+      console.warn("Migration failed (will retry):", err && err.message ? err.message : err);
+      migrationDone = false;
+    }
+
+    if (cancelled) return;
+    const q = query(collection(db, CUSTOMERS_COLLECTION), orderBy("name"));
+    unsub = onSnapshot(
+      q,
+      (snapshot) => onData(snapshot.docs.map((d) => d.data().name)),
+      (err) => {
+        console.warn("subscribeCustomers error:", describeError(err, "לקוחות (real-time)"));
+        onData([]);
+      }
+    );
+  })();
+
+  return () => {
+    cancelled = true;
+    unsub();
+  };
+}
+
+export function subscribeProjects(customerName, onData) {
+  let unsub = () => {};
+  let cancelled = false;
+
+  if (!customerName) {
+    onData([]);
+    return unsub;
+  }
+
+  (async () => {
+    await waitForFirebase();
+    if (cancelled) return;
+    try {
+      await ensureAuthenticated();
+    } catch {
+      onData([]);
+      return;
+    }
+    if (cancelled || !db) { onData([]); return; }
+
+    const col = collection(db, CUSTOMERS_COLLECTION, customerName, PROJECTS_COLLECTION);
+    const q = query(col, orderBy("name"));
+    unsub = onSnapshot(
+      q,
+      (snapshot) => onData(snapshot.docs.map((d) => d.data().name)),
+      (err) => {
+        console.warn("subscribeProjects error:", describeError(err, "פרויקטים (real-time)"));
+        onData([]);
+      }
+    );
+  })();
+
+  return () => {
+    cancelled = true;
+    unsub();
+  };
+}
+
+export { DOCUMENTS_COLLECTION, db, serverTimestamp, ensureAuthenticated, waitForFirebase };

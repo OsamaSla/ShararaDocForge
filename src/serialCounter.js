@@ -1,49 +1,117 @@
 // ═══════════════════════════════════════════════
-//  SERIAL NUMBER COUNTER
+//  SERIAL NUMBER COUNTER (Firestore)
 //  Per-document-type auto-incrementing counters
+//  Real-time sync via onSnapshot
 // ═══════════════════════════════════════════════
 
-const COUNTER_KEY = "sharara_serial_counters";
+import {
+  db,
+  ensureAuthenticated,
+  waitForFirebase,
+} from "./firebase.js";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  onSnapshot,
+  increment,
+} from "firebase/firestore";
 
-function readCounters() {
-  try {
-    const raw = localStorage.getItem(COUNTER_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+const COUNTER_DOC = "counters/documents";
+
+let countersCache = {};
+
+// ───────────────────────────────────────────────
+//  subscribeToCounters(onUpdate)
+//  Listens to /counters/documents in real-time.
+//  Returns an unsubscribe function.
+// ───────────────────────────────────────────────
+export function subscribeToCounters(onUpdate) {
+  let unsub = () => {};
+  let cancelled = false;
+
+  (async () => {
+    await waitForFirebase();
+    if (cancelled) return;
+    try {
+      await ensureAuthenticated();
+    } catch {
+      return;
+    }
+    if (cancelled || !db) return;
+
+    const ref = doc(db, COUNTER_DOC);
+    unsub = onSnapshot(
+      ref,
+      (snap) => {
+        countersCache = snap.exists() ? { ...snap.data() } : {};
+        if (onUpdate) onUpdate(countersCache);
+      },
+      (err) => {
+        console.warn("subscribeToCounters error:", err && err.message ? err.message : err);
+      }
+    );
+  })();
+
+  return () => {
+    cancelled = true;
+    unsub();
+  };
 }
 
-function writeCounters(data) {
-  try {
-    localStorage.setItem(COUNTER_KEY, JSON.stringify(data));
-  } catch {
-    // storage full or unavailable
-  }
-}
-
+// ───────────────────────────────────────────────
+//  getNextSerial(docType)
+//  Synchronous read from the local cache.
+// ───────────────────────────────────────────────
 export function getNextSerial(docType) {
   if (!docType) return 1;
-  const counters = readCounters();
-  return (counters[docType] || 0) + 1;
+  return (countersCache[docType] || 0) + 1;
 }
 
-export function incrementSerial(docType) {
-  if (!docType) return;
-  const counters = readCounters();
-  counters[docType] = (counters[docType] || 0) + 1;
-  writeCounters(counters);
+// ───────────────────────────────────────────────
+//  getAllCounters()
+//  Synchronous read from the local cache.
+// ───────────────────────────────────────────────
+export function getAllCounters() {
+  return { ...countersCache };
 }
 
-export function setSerial(docType, value) {
-  if (!docType) return;
+// ───────────────────────────────────────────────
+//  incrementSerial(docType)
+//  Atomic increment in Firestore using FieldValue.increment.
+// ───────────────────────────────────────────────
+export async function incrementSerial(docType) {
+  if (!docType || !db) return;
+  try {
+    await ensureAuthenticated();
+  } catch {
+    return;
+  }
+  const ref = doc(db, COUNTER_DOC);
+  try {
+    await setDoc(ref, { [docType]: increment(1) }, { merge: true });
+  } catch (err) {
+    console.warn("incrementSerial error:", err && err.message ? err.message : err);
+  }
+}
+
+// ───────────────────────────────────────────────
+//  setSerial(docType, value)
+//  Sets the counter value in Firestore.
+// ───────────────────────────────────────────────
+export async function setSerial(docType, value) {
+  if (!docType || !db) return;
   const num = parseInt(value, 10);
   if (isNaN(num) || num < 0) return;
-  const counters = readCounters();
-  counters[docType] = num;
-  writeCounters(counters);
-}
-
-export function getAllCounters() {
-  return readCounters();
+  try {
+    await ensureAuthenticated();
+  } catch {
+    return;
+  }
+  const ref = doc(db, COUNTER_DOC);
+  try {
+    await setDoc(ref, { [docType]: num }, { merge: true });
+  } catch (err) {
+    console.warn("setSerial error:", err && err.message ? err.message : err);
+  }
 }

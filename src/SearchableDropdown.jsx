@@ -7,6 +7,8 @@ export default function SearchableDropdown({
   placeholder = "",
   className = "",
   required = false,
+  disabled = false,
+  hideCreate = false,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -92,6 +94,23 @@ export default function SearchableDropdown({
     }
   };
 
+  if (disabled) {
+    return (
+      <div className={`sd-container ${className}`} style={{ opacity: 0.6 }}>
+        <div className="sd-trigger">
+          <input
+            type="text"
+            value={displayValue}
+            placeholder={placeholder || "בחר לקוח תחילה..."}
+            className="sd-input"
+            disabled
+          />
+          <span className="sd-chevron">&#9662;</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={containerRef} className={`sd-container ${className}`}>
       <div
@@ -122,7 +141,7 @@ export default function SearchableDropdown({
       {isOpen && (
         <ul className="sd-list" role="listbox">
           {filteredOptions.length === 0 ? (
-            query.trim() ? (
+            query.trim() && !hideCreate ? (
               <li
                 className="sd-option sd-option-create"
                 onClick={handleCreateNew}
