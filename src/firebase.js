@@ -177,19 +177,20 @@ export function normalizeDoc(raw, id, source) {
   };
 }
 
-async function getNextSerialNumber() {
+async function getNextSerialNumber(docType) {
   if (!firebaseAvailable || !db) return null;
+  const key = docType || "quote";
   const counterRef = doc(db, COUNTER_DOC_PATH);
   try {
     const serial = await withTimeout(
       runTransaction(db, async (transaction) => {
         const counterDoc = await transaction.get(counterRef);
-        let lastSerial = 0;
+        let currentVal = 0;
         if (counterDoc.exists()) {
-          lastSerial = counterDoc.data().lastSerialNumber || 0;
+          currentVal = counterDoc.data()[key] || 0;
         }
-        const nextSerial = lastSerial + 1;
-        transaction.set(counterRef, { lastSerialNumber: nextSerial }, { merge: true });
+        const nextSerial = currentVal + 1;
+        transaction.set(counterRef, { [key]: nextSerial }, { merge: true });
         return nextSerial;
       }),
       15000,
@@ -208,7 +209,7 @@ export async function saveNewDocument(documentData, companySnapshot = null) {
     const newId = doc(collection(db, DOCUMENTS_COLLECTION)).id;
     const docRef = doc(db, DOCUMENTS_COLLECTION, newId);
 
-    const serial = await getNextSerialNumber();
+    const serial = await getNextSerialNumber(documentData.docType || "quote");
     const assignedSerial = serial !== null ? String(serial) : documentData.serialNumber || "";
 
     try {
@@ -376,13 +377,14 @@ export function isFirebaseAvailable() {
   return firebaseAvailable;
 }
 
-export async function getProjectedSerial() {
+export async function getProjectedSerial(docType = "quote") {
   if (!firebaseAvailable || !db) return null;
+  const key = docType || "quote";
   const counterRef = doc(db, COUNTER_DOC_PATH);
   try {
     const counterDoc = await withTimeout(getDoc(counterRef), 10000, "Firestore counter read");
     if (counterDoc.exists()) {
-      return (counterDoc.data().lastSerialNumber || 0) + 1;
+      return (counterDoc.data()[key] || 0) + 1;
     }
     return 1;
   } catch (e) {
@@ -429,7 +431,7 @@ export async function resetAllActiveDocuments() {
 
   const counterRef = doc(db, COUNTER_DOC_PATH);
   try {
-    await setDoc(counterRef, { lastSerialNumber: 0 });
+    await setDoc(counterRef, { quote: 0, work_order: 0, agreement: 0 });
   } catch {}
 }
 

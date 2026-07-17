@@ -164,7 +164,7 @@ function DocumentPreview({ company, doc }) {
       setProjectedSerial(null);
     } else {
       setProjectedSerial(null);
-      getProjectedSerial().then((s) => setProjectedSerial(s)).catch(() => {});
+      getProjectedSerial(doc.docType || "quote").then((s) => setProjectedSerial(s)).catch(() => {});
     }
   }, [doc.serialNumber, doc.docId]);
 
@@ -941,16 +941,12 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
   const [passwordChangeMsg, setPasswordChangeMsg] = useState(null);
 
   const [counters, setCounters] = useState({});
-  const [selectedDocType, setSelectedDocType] = useState(DOCUMENT_TYPES[0].label);
-  const [firestoreSerial, setFirestoreSerial] = useState(null);
+  const [selectedDocType, setSelectedDocType] = useState(DOCUMENT_TYPES[0].value);
   const [allDocs, setAllDocs] = useState([]);
 
   useEffect(() => {
     const unsub = subscribeToCounters((data) => {
       setCounters(data || {});
-      if (data && data.lastSerialNumber != null) {
-        setFirestoreSerial(data.lastSerialNumber);
-      }
     });
     return () => unsub();
   }, []);
@@ -962,10 +958,10 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
   const maxSerialsByType = useMemo(() => {
     const map = {};
     allDocs.forEach((d) => {
-      const label = resolveDocLabel(d);
+      const typeKey = d.docType || "quote";
       const serial = parseInt(d.serialNumber, 10);
-      if (label && !isNaN(serial)) {
-        map[label] = Math.max(map[label] || 0, serial);
+      if (typeKey && !isNaN(serial)) {
+        map[typeKey] = Math.max(map[typeKey] || 0, serial);
       }
     });
     return map;
@@ -973,7 +969,7 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
 
   const allSerialTypes = useMemo(() => {
     const map = {};
-    DOCUMENT_TYPES.forEach((t) => { map[t.label] = t.label; });
+    DOCUMENT_TYPES.forEach((t) => { map[t.value] = t.label; });
     Object.keys(counters).forEach((k) => {
       if (!map[k] && k !== "lastSerialNumber") map[k] = k;
     });
@@ -1228,11 +1224,6 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
                 הבא: #{String(nextVal).padStart(4, "0")}
               </span>
             </div>
-            {firestoreSerial != null && (
-              <p className="text-[10px] text-gray-400 mt-3">
-                מונה ענן: #{String(firestoreSerial).padStart(6, "0")}
-              </p>
-            )}
           </div>
         </div>
       )}
