@@ -42,8 +42,12 @@ const DEFAULT_COMPANY = {
     "תכנון וביצוע מערכות מיזוג אוויר ואוורור פינוי עשן יצור תעלות פח צינורות 'ספירקל' ואביזרים תעלות נירוסטה ומנדפים תעלות פח שחור חיתוך וכיפוף פחים מכירה והתקנת כל סוגי המזגנים",
   phone: "04-6082264",
   fax: "04-6082263",
-  mobile: "050-5215192",
+  mobile1: "050-5215192",
+  contactName1: "",
+  mobile2: "",
+  contactName2: "",
   email: "ali@sharara.co.il",
+  email2: "",
   website: "www.sharara.co.il",
   address: "שכ' מזרחית, נצרת/ריינה",
 };
@@ -197,12 +201,32 @@ function DocumentPreview({ company, doc }) {
           </div>
         </div>
         <div className="letterhead-contact">
-          <span>Tel: <span className="dir-ltr">{headerCompany.phone}</span></span>
-          <span>Fax: <span className="dir-ltr">{headerCompany.fax}</span></span>
-          <span>Mobile: <span className="dir-ltr">{headerCompany.mobile}</span></span>
-          <span>{headerCompany.email}</span>
-          <span>{headerCompany.website}</span>
-          <span>{headerCompany.address}</span>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 w-full">
+            <span>Tel: <span className="dir-ltr">{headerCompany.phone}</span></span>
+            <span>Fax: <span className="dir-ltr">{headerCompany.fax}</span></span>
+            {(headerCompany.mobile1 || headerCompany.mobile) && (
+              <span>
+                {headerCompany.contactName1
+                  ? `${headerCompany.contactName1}: `
+                  : "Mobile: "}
+                <span className="dir-ltr">{headerCompany.mobile1 || headerCompany.mobile}</span>
+              </span>
+            )}
+            {headerCompany.mobile2 && (
+              <span>
+                {headerCompany.contactName2
+                  ? `${headerCompany.contactName2}: `
+                  : "נייד 2: "}
+                <span className="dir-ltr">{headerCompany.mobile2}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 w-full">
+            <span>{headerCompany.email}</span>
+            {headerCompany.email2 && <span>{headerCompany.email2}</span>}
+            <span>{headerCompany.website}</span>
+            <span>{headerCompany.address}</span>
+          </div>
         </div>
       </div>
 
@@ -873,12 +897,37 @@ function CompanySettings({ company, onChange }) {
           />
         </div>
         <div className="settings-field">
-          <label className="form-label">נייד (Mobile)</label>
+          <label className="form-label">נייד 1</label>
           <input
-            value={company.mobile}
-            onChange={(e) => set("mobile", e.target.value)}
+            value={company.mobile1}
+            onChange={(e) => set("mobile1", e.target.value)}
             className="form-input"
             dir="ltr"
+          />
+        </div>
+        <div className="settings-field">
+          <label className="form-label">שם איש קשר 1</label>
+          <input
+            value={company.contactName1}
+            onChange={(e) => set("contactName1", e.target.value)}
+            className="form-input"
+          />
+        </div>
+        <div className="settings-field">
+          <label className="form-label">נייד 2</label>
+          <input
+            value={company.mobile2}
+            onChange={(e) => set("mobile2", e.target.value)}
+            className="form-input"
+            dir="ltr"
+          />
+        </div>
+        <div className="settings-field">
+          <label className="form-label">שם איש קשר 2</label>
+          <input
+            value={company.contactName2}
+            onChange={(e) => set("contactName2", e.target.value)}
+            className="form-input"
           />
         </div>
         <div className="settings-field">
@@ -886,6 +935,15 @@ function CompanySettings({ company, onChange }) {
           <input
             value={company.email}
             onChange={(e) => set("email", e.target.value)}
+            className="form-input"
+            dir="ltr"
+          />
+        </div>
+        <div className="settings-field">
+          <label className="form-label">אימייל נוסף</label>
+          <input
+            value={company.email2}
+            onChange={(e) => set("email2", e.target.value)}
             className="form-input"
             dir="ltr"
           />
