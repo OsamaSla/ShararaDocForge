@@ -6,7 +6,6 @@ import {
   restoreDocument,
   exportBackupToFirestore,
   resetAllActiveDocuments,
-  getProjectedSerial,
   normalizeDoc,
   addCustomerName,
   deleteCustomerName,
@@ -18,7 +17,7 @@ import {
   subscribeProjects,
 } from "./firebase";
 import { getCustomerDetails, harvestCustomerProject, subscribeToCustomers } from "./customerProjectDB";
-import { incrementSerial, setSerial, subscribeToCounters } from "./serialCounter";
+import { incrementSerial, setSerial, subscribeToCounters, getNextSerial, bumpCounterCache, initializeCountersFromArchive, getAllCounters } from "./serialCounter";
 import SearchableDropdown from "./SearchableDropdown";
 import logoImg from "./logo.png";
 import signatureImg from "./SHARARA SIGNATURE.png";
@@ -161,22 +160,10 @@ function Toast({ message, type }) {
 
 function DocumentPreview({ company, doc }) {
   const headerCompany = doc.companySnapshot || company;
-  const [projectedSerial, setProjectedSerial] = useState(null);
-
-  useEffect(() => {
-    if (doc.serialNumber && String(doc.serialNumber).trim()) {
-      setProjectedSerial(null);
-    } else {
-      setProjectedSerial(null);
-      getProjectedSerial(doc.docType || "quote").then((s) => setProjectedSerial(s)).catch(() => {});
-    }
-  }, [doc.serialNumber, doc.docId]);
 
   const serialValue = doc.serialNumber && String(doc.serialNumber).trim()
     ? String(doc.serialNumber).padStart(6, "0")
-    : projectedSerial
-      ? String(projectedSerial).padStart(6, "0")
-      : null;
+    : String(getNextSerial(doc.docType || "quote")).padStart(6, "0");
   const vatRate = getEffectiveVatRate(doc);
   const subtotal = useMemo(() => calcSubtotal(doc.items), [doc.items]);
   const vatAmt = useMemo(() => calcVAT(subtotal, vatRate), [subtotal, vatRate]);
@@ -1630,7 +1617,28 @@ export default function App() {
   const [archiveRefreshKey, setArchiveRefreshKey] = useState(0);
   const [showValidation, setShowValidation] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [counters, setCounters] = useState({});
   const toastTimerRef = useRef(null);
+
+  useEffect(() => {
+    const unsub = subscribeToCounters((c) => setCounters(c));
+    return () => unsub();
+  }, []);
+
+  // Initialize counters from existing archive documents
+  // so that previously-saved serials are reflected immediately.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const docs = await listDocuments(true);
+        if (cancelled) return;
+        initializeCountersFromArchive(docs);
+        setCounters({ ...getAllCounters() });
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const displayDoc = previewOverride || doc;
   const isFormInvalid = useMemo(() => !validateDocument(doc).valid, [doc]);
@@ -1678,9 +1686,13 @@ export default function App() {
       const companySnap = deepCopyCompany(company);
       const result = await saveNewDocument(snapshot, companySnap);
       harvestCustomerProject(snapshot.clientName, snapshot.projectName, snapshot.contactPhone, snapshot.contactFax).catch(() => {});
+      const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
+      if (counterKey) {
+        const bumpVal = getNextSerial(counterKey);
+        await incrementSerial(counterKey);
+        bumpCounterCache(counterKey, bumpVal);
+      }
       if (result.source === "local") {
-        const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
-        if (counterKey) incrementSerial(counterKey).catch(() => {});
         showToast(
           "המסמך נשמר בהצלחה באופן מקומי בדפדפן",
           "local"

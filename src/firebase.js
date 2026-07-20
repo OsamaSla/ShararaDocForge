@@ -11,7 +11,6 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  runTransaction,
   writeBatch,
   onSnapshot,
 } from "firebase/firestore";
@@ -182,23 +181,13 @@ async function getNextSerialNumber(docType) {
   const key = docType || "quote";
   const counterRef = doc(db, COUNTER_DOC_PATH);
   try {
-    const serial = await withTimeout(
-      runTransaction(db, async (transaction) => {
-        const counterDoc = await transaction.get(counterRef);
-        let currentVal = 0;
-        if (counterDoc.exists()) {
-          currentVal = counterDoc.data()[key] || 0;
-        }
-        const nextSerial = currentVal + 1;
-        transaction.set(counterRef, { [key]: nextSerial }, { merge: true });
-        return nextSerial;
-      }),
-      15000,
-      "Firestore serial transaction"
-    );
-    return serial;
+    const counterDoc = await withTimeout(getDoc(counterRef), 10000, "Firestore counter read");
+    if (counterDoc.exists()) {
+      return (counterDoc.data()[key] || 0) + 1;
+    }
+    return 1;
   } catch (e) {
-    console.warn("Firestore serial transaction failed:", e);
+    console.warn("Firestore serial read failed:", e);
     return null;
   }
 }
