@@ -113,6 +113,7 @@ body {
 .items-table tbody tr:nth-child(even) { background: #f7f9fb; }
 .items-table .col-num { width: 5%; text-align: center; }
 .items-table .col-desc { width: 50%; }
+.items-table .col-desc-simple { width: 95%; }
 .items-table .col-unit { width: 6%; text-align: center; }
 .items-table .col-qty { width: 6%; text-align: center; }
 .items-table .col-price { width: 15%; text-align: center; }

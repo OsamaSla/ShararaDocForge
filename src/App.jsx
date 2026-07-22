@@ -73,6 +73,7 @@ const freshDocState = (docType = "quote") => ({
   vatRate: 18,
   customVat: "",
   items: [freshItem()],
+  simpleLayout: false,
 });
 
 // ═══════════════════════════════════════════════
@@ -235,64 +236,77 @@ function DocumentPreview({ company, doc }) {
         <thead>
           <tr>
             <th className="col-num">מס'</th>
-            <th className="col-desc">תאור</th>
-            <th className="col-unit">יח' מידה</th>
-            <th className="col-qty">כמות</th>
-            <th className="col-price">מחיר ליחידה</th>
-            <th className="col-total">סה"כ לפני מע"מ</th>
+            <th className={doc.simpleLayout ? "col-desc-simple" : "col-desc"}>תאור</th>
+            {!doc.simpleLayout && (
+              <>
+                <th className="col-unit">יח' מידה</th>
+                <th className="col-qty">כמות</th>
+                <th className="col-price">מחיר ליחידה</th>
+                <th className="col-total">סה"כ לפני מע"מ</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
           {filled.map((item, idx) => (
             <tr key={item.id}>
               <td className="col-num">{idx + 1}</td>
-              <td>{item.description}</td>
-              <td className="col-unit">{item.unit}</td>
-              <td className="col-qty">{item.quantity}</td>
-              <td className="col-price num-cell">{fmt(item.unitPrice)} ₪</td>
-              <td className="col-total num-cell">{fmt(calcLine(item))} ₪</td>
+              <td className={doc.simpleLayout ? "col-desc-simple" : ""}>{item.description}</td>
+              {!doc.simpleLayout && (
+                <>
+                  <td className="col-unit">{item.unit}</td>
+                  <td className="col-qty">{item.quantity}</td>
+                  <td className="col-price num-cell">{fmt(item.unitPrice)} ₪</td>
+                  <td className="col-total num-cell">{fmt(calcLine(item))} ₪</td>
+                </>
+              )}
             </tr>
           ))}
           {filled.length === 0 && (
-            <tr className="empty-row"><td colSpan={6}>—</td></tr>
+            <tr className="empty-row"><td colSpan={doc.simpleLayout ? 2 : 6}>—</td></tr>
           )}
           {Array.from({ length: padRow }).map((_, i) => (
             <tr key={`pad-${i}`} style={{ height: 26 }}>
-              <td>&nbsp;</td><td /><td /><td /><td /><td />
+              <td>&nbsp;</td>
+              {doc.simpleLayout ? <td /> : <><td /><td /><td /><td /><td /></>}
             </tr>
           ))}
         </tbody>
       </table>
 
       {/* ── TOTALS CARD ── */}
-      <div className="totals-card">
-        <div className="totals-card-inner">
-          <div className="totals-card-row">
-            <span>סה"כ לפני מע"מ</span>
-            <span className="dir-ltr">{fmt(subtotal)} ₪</span>
-          </div>
-          <div className="totals-card-row">
-            <span>מע"מ ({vatRate}%)</span>
-            <span className="dir-ltr">{fmt(vatAmt)} ₪</span>
-          </div>
-          <div className="totals-card-row grand">
-            <span>סה"כ לתשלום</span>
-            <span className="dir-ltr">{fmt(grand)} ₪</span>
+      {!doc.simpleLayout && (
+        <div className="totals-card">
+          <div className="totals-card-inner">
+            <div className="totals-card-row">
+              <span>סה"כ לפני מע"מ</span>
+              <span className="dir-ltr">{fmt(subtotal)} ₪</span>
+            </div>
+            <div className="totals-card-row">
+              <span>מע"מ ({vatRate}%)</span>
+              <span className="dir-ltr">{fmt(vatAmt)} ₪</span>
+            </div>
+            <div className="totals-card-row grand">
+              <span>סה"כ לתשלום</span>
+              <span className="dir-ltr">{fmt(grand)} ₪</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── LEGAL TERMS ── */}
-      <div className="legal-section">
-        <p>
-          נא לאשר את ההצעה תוך ___ ימים מיום קבלתה. תנאי תשלום: שוטף + 30 יום.
-          לפי שמוסכם. שיק בזמן קבלת ההזמנה. ט.ל.ח
-        </p>
-        <p>
-          החתום על הצעת מחיר זו ערב באופן אישי לפירעון התשלום.
-          הסחורה בבעלות עלי שרארה בע"מ עד לפרעון התשלום.
-        </p>
-      </div>
+      {!doc.simpleLayout && (
+        <div className="legal-section">
+          <p>
+            נא לאשר את ההצעה תוך ___ ימים מיום קבלתה. תנאי תשלום: שוטף + 30 יום.
+            לפי שמוסכם. שיק בזמן קבלת ההזמנה. ט.ל.ח
+          </p>
+          <p>
+            החתום על הצעת מחיר זו ערב באופן אישי לפירעון התשלום.
+            הסחורה בבעלות עלי שרארה בע"מ עד לפרעון התשלום.
+          </p>
+        </div>
+      )}
 
       {/* ── SIGNATURE BLOCK ── */}
       <div className="signature-block">
@@ -427,6 +441,31 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
         )}
       </div>
 
+      {/* ── Layout Toggle ── */}
+      <div className="flex items-center gap-3">
+        <label className="form-label mb-0">תבנית:</label>
+        <button
+          onClick={() => set("simpleLayout", false)}
+          className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+            !doc.simpleLayout
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          מלא
+        </button>
+        <button
+          onClick={() => set("simpleLayout", true)}
+          className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+            doc.simpleLayout
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          פשוט
+        </button>
+      </div>
+
       {/* ── Client Info Grid ── */}
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -536,6 +575,7 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
               onChange((p) => ({ ...p, items: [...p.items, item] }));
             }}
             showValidation={showValidation}
+            simpleLayout={doc.simpleLayout}
           />
         </div>
 
@@ -546,28 +586,32 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
               <div key={item.id} className="bg-white border border-gray-200 rounded p-2">
                 <div className="flex items-center gap-1.5">
                   <span className="w-5 text-center text-gray-400 font-semibold shrink-0">{idx + 1}</span>
-                  <select
-                    value={item.unit}
-                    onChange={(e) => setItem(item.id, "unit", e.target.value)}
-                    className="w-14 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                  <input
-                    type="number"
-                    min="0"
-                    value={item.quantity}
-                    onChange={(e) => setItem(item.id, "quantity", Number(e.target.value))}
-                    className="w-12 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    value={item.unitPrice}
-                    onChange={(e) => setItem(item.id, "unitPrice", Number(e.target.value))}
-                    className="w-16 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <span className="w-16 shrink-0 text-center text-gray-500 font-medium tabular-nums text-[11px]">{fmt(calcLine(item))} ₪</span>
+                  {!doc.simpleLayout && (
+                    <>
+                      <select
+                        value={item.unit}
+                        onChange={(e) => setItem(item.id, "unit", e.target.value)}
+                        className="w-14 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.quantity}
+                        onChange={(e) => setItem(item.id, "quantity", Number(e.target.value))}
+                        className="w-12 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.unitPrice}
+                        onChange={(e) => setItem(item.id, "unitPrice", Number(e.target.value))}
+                        className="w-16 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <span className="w-16 shrink-0 text-center text-gray-500 font-medium tabular-nums text-[11px]">{fmt(calcLine(item))} ₪</span>
+                    </>
+                  )}
                   <button
                     onClick={() => delRow(item.id)}
                     className="text-red-300 hover:text-red-600 transition-colors text-sm leading-none px-1 shrink-0"
@@ -576,7 +620,7 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
                     &times;
                   </button>
                 </div>
-                <div className="flex items-center gap-1.5 mr-7 mt-1">
+                <div className={`flex items-center gap-1.5 mt-1 ${doc.simpleLayout ? "mr-7" : "mr-7"}`}>
                   <input
                     placeholder="תיאור פריט..."
                     value={item.description}
@@ -604,8 +648,8 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
   );
 }
 
-// ── Add Item Row (two-line input) ──
-function AddItemRow({ onAdd }) {
+// ── Add Item Row ──
+function AddItemRow({ onAdd, simpleLayout }) {
   const [unit, setUnit] = useState("יח'");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
@@ -633,59 +677,82 @@ function AddItemRow({ onAdd }) {
 
   return (
     <div className="space-y-1">
-      {/* column labels */}
-      <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-medium">
-        <span className="w-5 shrink-0" />
-        <span className="w-14 shrink-0 text-center">יח'</span>
-        <span className="w-12 shrink-0 text-center">כמות</span>
-        <span className="w-16 shrink-0 text-center">מחיר ש"ח</span>
-        <span className="flex-1" />
-        <span className="w-12 shrink-0" />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="w-5 text-center text-emerald-600 font-semibold shrink-0">+</span>
-        <select
-          value={unit}
-          onChange={(e) => setUnit(e.target.value)}
-          className="w-14 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-        >
-          {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-        </select>
-        <input
-          type="number"
-          min="0"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="w-12 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          placeholder="כמות"
-        />
-        <input
-          type="number"
-          min="0"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="w-16 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          placeholder="0.00"
-        />
-        <button
-          onClick={handleAdd}
-          disabled={!desc.trim()}
-          className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors shrink-0"
-        >
-          הוסף
-        </button>
-      </div>
-      <div className="flex items-center gap-1.5 mr-7">
-        <input
-          placeholder="תיאור פריט..."
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="flex-1 border border-emerald-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-        />
-      </div>
+      {!simpleLayout && (
+        <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-medium">
+          <span className="w-5 shrink-0" />
+          <span className="w-14 shrink-0 text-center">יח'</span>
+          <span className="w-12 shrink-0 text-center">כמות</span>
+          <span className="w-16 shrink-0 text-center">מחיר ש"ח</span>
+          <span className="flex-1" />
+          <span className="w-12 shrink-0" />
+        </div>
+      )}
+      {simpleLayout ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            placeholder="תיאור פריט..."
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="flex-1 border border-emerald-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            autoFocus
+          />
+          <button
+            onClick={handleAdd}
+            disabled={!desc.trim()}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors shrink-0"
+          >
+            הוסף
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5">
+            <span className="w-5 text-center text-emerald-600 font-semibold shrink-0">+</span>
+            <select
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              className="w-14 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <input
+              type="number"
+              min="0"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-12 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder="כמות"
+            />
+            <input
+              type="number"
+              min="0"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-16 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder="0.00"
+            />
+            <button
+              onClick={handleAdd}
+              disabled={!desc.trim()}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors shrink-0"
+            >
+              הוסף
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 mr-7">
+            <input
+              placeholder="תיאור פריט..."
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="flex-1 border border-emerald-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
