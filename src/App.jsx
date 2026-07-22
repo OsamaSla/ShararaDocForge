@@ -1840,6 +1840,8 @@ export default function App() {
 
   const handleClearPreview = useCallback(() => {
     setPreviewOverride(null);
+    setDoc(freshDocState());
+    setIsDirty(false);
   }, []);
 
   useEffect(() => {
