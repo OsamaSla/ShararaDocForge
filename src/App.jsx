@@ -73,7 +73,6 @@ const freshDocState = (docType = "quote") => ({
   vatRate: 18,
   customVat: "",
   items: [freshItem()],
-  notes: "",
 });
 
 // ═══════════════════════════════════════════════
@@ -228,7 +227,7 @@ function DocumentPreview({ company, doc }) {
         <div><span className="meta-label">שם הפרויקט:</span> {doc.projectName || <span className="meta-dash">—</span>}</div>
         <div><span className="meta-label">איש קשר:</span> {doc.contactPerson || <span className="meta-dash">—</span>}</div>
         <div><span className="meta-label">מס' טלפון:</span> {doc.contactPhone || <span className="meta-dash">—</span>}</div>
-        <div><span className="meta-label">מס' פקס:</span> {doc.contactFax || <span className="meta-dash">—</span>}</div>
+        <div><span className="meta-label">ח.פ.:</span> {doc.contactFax || <span className="meta-dash">—</span>}</div>
       </div>
 
       {/* ── ITEMS TABLE ── */}
@@ -282,14 +281,6 @@ function DocumentPreview({ company, doc }) {
           </div>
         </div>
       </div>
-
-      {/* ── NOTES / TERMS ── */}
-      {notes && (
-        <div className="notes-section">
-          <p className="notes-label">הערות / תנאים:</p>
-          <p className="notes-content">{notes}</p>
-        </div>
-      )}
 
       {/* ── LEGAL TERMS ── */}
       <div className="legal-section">
@@ -488,7 +479,7 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
           <input value={doc.contactPhone} onChange={(e) => set("contactPhone", e.target.value)} className="form-input" />
         </div>
         <div>
-          <label className="form-label">פקס</label>
+          <label className="form-label">ח.פ.</label>
           <input value={doc.contactFax} onChange={(e) => set("contactFax", e.target.value)} className="form-input" />
         </div>
       </div>
@@ -548,74 +539,53 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
           />
         </div>
 
-        {/* ── Items Table ── */}
+        {/* ── Items List ── */}
         {doc.items.length > 0 && (
-          <div className="border border-gray-200 rounded overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-100 text-gray-600">
-                  <th className="w-7 py-1.5 text-center">#</th>
-                  <th className="py-1.5 text-center">יח'</th>
-                  <th className="py-1.5 text-center">כמות</th>
-                  <th className="py-1.5 text-center">מחיר ₪</th>
-                  <th className="py-1.5 text-center">סה"כ ₪</th>
-                  <th className="py-1.5 text-right pr-1">תיאור</th>
-                  <th className="w-7 py-1.5"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {doc.items.map((item, idx) => (
-                  <tr key={item.id} className="border-t border-gray-100 hover:bg-gray-50/80">
-                    <td className="text-center text-gray-400 font-semibold">{idx + 1}</td>
-                    <td className="text-center">
-                      <select
-                        value={item.unit}
-                        onChange={(e) => setItem(item.id, "unit", e.target.value)}
-                        className="w-12 border border-transparent hover:border-gray-300 rounded px-1 py-1 text-center bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </td>
-                    <td className="text-center">
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.quantity}
-                        onChange={(e) => setItem(item.id, "quantity", Number(e.target.value))}
-                        className="w-12 border border-transparent hover:border-gray-300 rounded px-1 py-1 text-center bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="text-center">
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.unitPrice}
-                        onChange={(e) => setItem(item.id, "unitPrice", Number(e.target.value))}
-                        className="w-14 border border-transparent hover:border-gray-300 rounded px-1 py-1 text-center bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="text-center text-gray-500 font-medium tabular-nums whitespace-nowrap">{fmt(calcLine(item))} ₪</td>
-                    <td className="pr-1">
-                      <input
-                        placeholder="תיאור..."
-                        value={item.description}
-                        onChange={(e) => setItem(item.id, "description", e.target.value)}
-                        className={`w-full border border-transparent hover:border-gray-300 rounded px-1.5 py-1 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${showValidation && validationErrors?.noDescription && (!item.description || !item.description.trim()) ? "border-red-400" : ""}`}
-                      />
-                    </td>
-                    <td className="text-center">
-                      <button
-                        onClick={() => delRow(item.id)}
-                        className="text-red-300 hover:text-red-600 transition-colors text-sm leading-none px-1"
-                        title="מחק סעיף"
-                      >
-                        &times;
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {doc.items.map((item, idx) => (
+              <div key={item.id} className="bg-white border border-gray-200 rounded p-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-5 text-center text-gray-400 font-semibold shrink-0">{idx + 1}</span>
+                  <select
+                    value={item.unit}
+                    onChange={(e) => setItem(item.id, "unit", e.target.value)}
+                    className="w-14 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    value={item.quantity}
+                    onChange={(e) => setItem(item.id, "quantity", Number(e.target.value))}
+                    className="w-12 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={item.unitPrice}
+                    onChange={(e) => setItem(item.id, "unitPrice", Number(e.target.value))}
+                    className="w-16 shrink-0 border border-gray-200 hover:border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="w-16 shrink-0 text-center text-gray-500 font-medium tabular-nums text-[11px]">{fmt(calcLine(item))} ₪</span>
+                  <button
+                    onClick={() => delRow(item.id)}
+                    className="text-red-300 hover:text-red-600 transition-colors text-sm leading-none px-1 shrink-0"
+                    title="מחק סעיף"
+                  >
+                    &times;
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 mr-7 mt-1">
+                  <input
+                    placeholder="תיאור פריט..."
+                    value={item.description}
+                    onChange={(e) => setItem(item.id, "description", e.target.value)}
+                    className={`flex-1 border border-gray-200 hover:border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${showValidation && validationErrors?.noDescription && (!item.description || !item.description.trim()) ? "border-red-400" : ""}`}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         )}
         {doc.items.length === 0 && (
@@ -624,18 +594,6 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
         {showValidation && validationErrors?.noDescription && (
           <p className="validation-hint mt-1">חובה להזין תיאור לפחות בסעיף אחד</p>
         )}
-      </div>
-
-      {/* ── Notes ── */}
-      <div>
-        <label className="form-label">הערות / תנאים</label>
-        <textarea
-          rows={6}
-          value={doc.notes || ""}
-          onChange={(e) => set("notes", e.target.value)}
-          className="form-input notes-textarea"
-          placeholder="תנאים נוספים, תנאי תשלום וכו׳"
-        />
       </div>
 
       {/* ── Reset ── */}
