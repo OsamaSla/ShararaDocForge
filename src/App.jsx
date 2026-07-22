@@ -349,6 +349,9 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
     set("clientName", val);
     set("projectName", "");
     if (val && val.trim()) {
+      if (!allCustomers.includes(val)) {
+        addCustomerName(val).catch(() => {});
+      }
       const details = getCustomerDetails(val);
       if (details) {
         set("contactPhone", details.phone || "");
@@ -359,6 +362,9 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
 
   const handleProjectChange = (val) => {
     set("projectName", val);
+    if (val && val.trim() && doc.clientName && !projectOptions.includes(val)) {
+      addProjectName(val, doc.clientName).catch(() => {});
+    }
   };
 
   const setItem = (id, field, val) =>
@@ -440,7 +446,6 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             options={allCustomers}
             placeholder="הקלד או בחר שם לקוח..."
             className={`${showValidation && validationErrors?.clientName ? "form-input-error" : ""}`}
-            hideCreate
           />
           {showValidation && validationErrors?.clientName && (
             <p className="validation-hint">שדה חובה - הזן שם המזמין</p>
@@ -454,7 +459,6 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             options={projectOptions}
             placeholder="הקלד או בחר פרויקט..."
             disabled={!doc.clientName}
-            hideCreate
           />
         </div>
         <div>
@@ -527,55 +531,96 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">סעיפים</h3>
-          <button onClick={addRow} className="no-print bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors">
-            + הוסף סעיף
-          </button>
+          {doc.items.length > 0 && (
+            <button onClick={() => onChange((p) => ({ ...p, items: [] }))} className="text-[10px] text-gray-400 hover:text-gray-600 underline">
+              נקה הכל
+            </button>
+          )}
         </div>
 
-        <div className="space-y-1.5">
-          {doc.items.map((item, idx) => (
-            <div key={item.id} className={`bg-gray-50 border rounded p-1.5 text-xs ${showValidation && validationErrors?.noDescription && (!item.description || !item.description.trim()) ? "border-red-400" : "border-gray-200"}`}>
-              <div className="flex items-center gap-1">
-                <span className="w-5 text-center text-gray-400 font-semibold shrink-0">{idx + 1}</span>
-                <select
-                  value={item.unit}
-                  onChange={(e) => setItem(item.id, "unit", e.target.value)}
-                  className="w-14 shrink-0 border border-gray-300 rounded px-1 py-1 text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  value={item.quantity}
-                  onChange={(e) => setItem(item.id, "quantity", Number(e.target.value))}
-                  className="w-12 shrink-0 border border-gray-300 rounded px-1 py-1 text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  value={item.unitPrice}
-                  onChange={(e) => setItem(item.id, "unitPrice", Number(e.target.value))}
-                  className="w-16 shrink-0 border border-gray-300 rounded px-1 py-1 text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <span className="w-16 shrink-0 text-center text-gray-500 font-medium tabular-nums text-[11px]">{fmt(calcLine(item))} ₪</span>
-                <button
-                  onClick={() => delRow(item.id)}
-                  className="text-red-400 hover:text-red-600 text-base leading-none px-1 shrink-0"
-                  title="מחק סעיף"
-                >
-                  &times;
-                </button>
-              </div>
-              <input
-                placeholder="תיאור פריט..."
-                value={item.description}
-                onChange={(e) => setItem(item.id, "description", e.target.value)}
-                className={`mt-1.5 w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${showValidation && validationErrors?.noDescription && (!item.description || !item.description.trim()) ? "border-red-400" : "border-gray-300"}`}
-              />
-            </div>
-          ))}
+        {/* ── Add Single Row ── */}
+        <div className="bg-emerald-50 border border-emerald-200 rounded p-2 mb-3">
+          <AddItemRow
+            onAdd={(item) => {
+              onChange((p) => ({ ...p, items: [...p.items, item] }));
+            }}
+            showValidation={showValidation}
+          />
         </div>
+
+        {/* ── Items Table ── */}
+        {doc.items.length > 0 && (
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-100 text-gray-600">
+                  <th className="w-7 py-1.5 text-center">#</th>
+                  <th className="py-1.5 text-center">יח'</th>
+                  <th className="py-1.5 text-center">כמות</th>
+                  <th className="py-1.5 text-center">מחיר ₪</th>
+                  <th className="py-1.5 text-center">סה"כ ₪</th>
+                  <th className="py-1.5 text-right pr-1">תיאור</th>
+                  <th className="w-7 py-1.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {doc.items.map((item, idx) => (
+                  <tr key={item.id} className="border-t border-gray-100 hover:bg-gray-50/80">
+                    <td className="text-center text-gray-400 font-semibold">{idx + 1}</td>
+                    <td className="text-center">
+                      <select
+                        value={item.unit}
+                        onChange={(e) => setItem(item.id, "unit", e.target.value)}
+                        className="w-12 border border-transparent hover:border-gray-300 rounded px-1 py-1 text-center bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </td>
+                    <td className="text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.quantity}
+                        onChange={(e) => setItem(item.id, "quantity", Number(e.target.value))}
+                        className="w-12 border border-transparent hover:border-gray-300 rounded px-1 py-1 text-center bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.unitPrice}
+                        onChange={(e) => setItem(item.id, "unitPrice", Number(e.target.value))}
+                        className="w-14 border border-transparent hover:border-gray-300 rounded px-1 py-1 text-center bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="text-center text-gray-500 font-medium tabular-nums whitespace-nowrap">{fmt(calcLine(item))} ₪</td>
+                    <td className="pr-1">
+                      <input
+                        placeholder="תיאור..."
+                        value={item.description}
+                        onChange={(e) => setItem(item.id, "description", e.target.value)}
+                        className={`w-full border border-transparent hover:border-gray-300 rounded px-1.5 py-1 bg-transparent focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${showValidation && validationErrors?.noDescription && (!item.description || !item.description.trim()) ? "border-red-400" : ""}`}
+                      />
+                    </td>
+                    <td className="text-center">
+                      <button
+                        onClick={() => delRow(item.id)}
+                        className="text-red-300 hover:text-red-600 transition-colors text-sm leading-none px-1"
+                        title="מחק סעיף"
+                      >
+                        &times;
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {doc.items.length === 0 && (
+          <p className="text-center text-gray-400 text-xs py-4">אין סעיפים — הוסף סעיף חדש למעלה</p>
+        )}
         {showValidation && validationErrors?.noDescription && (
           <p className="validation-hint mt-1">חובה להזין תיאור לפחות בסעיף אחד</p>
         )}
@@ -597,6 +642,92 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
       <button onClick={resetForm} className="w-full bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold py-2 rounded transition-colors">
         אפס טופס
       </button>
+    </div>
+  );
+}
+
+// ── Add Item Row (two-line input) ──
+function AddItemRow({ onAdd }) {
+  const [unit, setUnit] = useState("יח'");
+  const [qty, setQty] = useState(1);
+  const [price, setPrice] = useState(0);
+  const [desc, setDesc] = useState("");
+
+  const handleAdd = () => {
+    const trimmed = desc.trim();
+    if (!trimmed) return;
+    onAdd({
+      id: crypto.randomUUID(),
+      description: trimmed,
+      unit: unit,
+      quantity: Number(qty) || 1,
+      unitPrice: Number(price) || 0,
+    });
+    setUnit("יח'");
+    setQty(1);
+    setPrice(0);
+    setDesc("");
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleAdd();
+  };
+
+  return (
+    <div className="space-y-1">
+      {/* column labels */}
+      <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-medium">
+        <span className="w-5 shrink-0" />
+        <span className="w-14 shrink-0 text-center">יח'</span>
+        <span className="w-12 shrink-0 text-center">כמות</span>
+        <span className="w-16 shrink-0 text-center">מחיר ש"ח</span>
+        <span className="flex-1" />
+        <span className="w-12 shrink-0" />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="w-5 text-center text-emerald-600 font-semibold shrink-0">+</span>
+        <select
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+          className="w-14 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+        >
+          {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+        </select>
+        <input
+          type="number"
+          min="0"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="w-12 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          placeholder="כמות"
+        />
+        <input
+          type="number"
+          min="0"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="w-16 shrink-0 border border-emerald-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          placeholder="0.00"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={!desc.trim()}
+          className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors shrink-0"
+        >
+          הוסף
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5 mr-7">
+        <input
+          placeholder="תיאור פריט..."
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 border border-emerald-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+        />
+      </div>
     </div>
   );
 }
@@ -1529,7 +1660,7 @@ function DbManagementPanel() {
                     ) : (
                       <div className="flex items-center justify-between group/proj">
                         <span className="text-sm text-gray-700">{p}</span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover/proj:opacity-100 transition-opacity shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => { setEditingProj(p); setEditProjVal(p); }}
                             className="text-gray-400 hover:text-blue-600 p-1 transition-colors"
