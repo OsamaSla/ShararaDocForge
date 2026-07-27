@@ -952,9 +952,6 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
                   <div className="font-bold text-gray-800">{fmt(grand)}</div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => onPreview(d)} className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded transition-colors" title="תצוגה">
-                    👁
-                  </button>
                   <button onClick={() => onLoadToForm(d, true)} className="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded transition-colors" title="ערוך מסמך">
                     ✏️
                   </button>
