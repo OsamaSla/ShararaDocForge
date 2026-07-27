@@ -168,6 +168,7 @@ export function normalizeDoc(raw, id, source) {
     vatRate: raw.vatRate != null ? Number(raw.vatRate) : 18,
     customVat: raw.customVat || "",
     notes: raw.notes || "",
+    simpleLayout: !!raw.simpleLayout,
     items,
     status: raw.status || "active",
     companySnapshot: raw.companySnapshot || null,
