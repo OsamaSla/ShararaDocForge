@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   saveNewDocument,
+  updateDocument,
   listDocuments,
   deleteDocument,
   restoreDocument,
@@ -527,7 +528,7 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
           }`}
         >
-          %מע"מ
+          18%
         </button>
         <div className="flex items-center gap-1">
           <input
@@ -535,7 +536,7 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             min="0"
             max="100"
             step="0.1"
-            placeholder="custom"
+            placeholder={'מע"מ'}
             value={doc.customVat}
             onChange={(e) => set("customVat", e.target.value)}
             className="vat-custom-input"
@@ -1833,22 +1834,28 @@ export default function App() {
     try {
       const snapshot = deepCopyDoc(doc);
       const companySnap = deepCopyCompany(company);
-      const result = await saveNewDocument(snapshot, companySnap);
-      harvestCustomerProject(snapshot.clientName, snapshot.projectName, snapshot.contactPhone, snapshot.contactFax).catch(() => {});
-      const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
-      if (counterKey) {
-        const bumpVal = getNextSerial(counterKey);
-        await incrementSerial(counterKey);
-        bumpCounterCache(counterKey, bumpVal);
-      }
-      if (result.source === "local") {
-        showToast(
-          "המסמך נשמר בהצלחה באופן מקומי בדפדפן",
-          "local"
-        );
+      const isEditing = !!snapshot.docId;
+
+      let result;
+      if (isEditing) {
+        await updateDocument(snapshot.docId, { ...snapshot, companySnapshot: companySnap });
+        result = { id: snapshot.docId, serial: snapshot.serialNumber, source: snapshot.source };
+        showToast("המסמך עודכן בהצלחה", "success");
       } else {
-        showToast("המסמך נשמר בהצלחה בענן (מס' " + (result.serial || "") + ")", "success");
+        result = await saveNewDocument(snapshot, companySnap);
+        const counterKey = snapshot.useCustomDocType ? snapshot.customDocType : snapshot.docType;
+        if (counterKey) {
+          const bumpVal = getNextSerial(counterKey);
+          await incrementSerial(counterKey);
+          bumpCounterCache(counterKey, bumpVal);
+        }
+        if (result.source === "local") {
+          showToast("המסמך נשמר בהצלחה באופן מקומי בדפדפן", "local");
+        } else {
+          showToast("המסמך נשמר בהצלחה בענן (מס' " + (result.serial || "") + ")", "success");
+        }
       }
+      harvestCustomerProject(snapshot.clientName, snapshot.projectName, snapshot.contactPhone, snapshot.contactFax).catch(() => {});
       setArchiveRefreshKey((k) => k + 1);
       setDoc(freshDocState());
       setIsDirty(true);
@@ -1885,10 +1892,8 @@ export default function App() {
       archiveEntry.source || "firebase"
     );
     delete loaded.id;
-    delete loaded.docId;
     delete loaded.createdAt;
     delete loaded.updatedAt;
-    delete loaded.source;
     if (!loaded.items || loaded.items.length === 0) {
       loaded.items = [freshItem()];
     }
