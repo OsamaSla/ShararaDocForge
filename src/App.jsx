@@ -7,6 +7,8 @@ import {
   restoreDocument,
   exportBackupToFirestore,
   resetAllActiveDocuments,
+  purgeDeletedDocuments,
+  renumberDocuments,
   normalizeDoc,
   addCustomerName,
   deleteCustomerName,
@@ -1131,10 +1133,39 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordChangeMsg, setPasswordChangeMsg] = useState(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
 
   const [counters, setCounters] = useState({});
   const [selectedDocType, setSelectedDocType] = useState(DOCUMENT_TYPES[0].value);
   const [allDocs, setAllDocs] = useState([]);
+
+  const handleCleanup = useCallback(async () => {
+    if (!window.confirm("פעולה זו תמחק לצמיתות את כל המסמכים שנמחקו (\"" + allDocs.filter(d => d.status === "deleted").length + " מסמכים) ותאפס את המספור הסידורי מחדש.\n\nהאם להמשיך?")) return;
+    if (!window.confirm("אזהרה סופית: הפעולה בלתי הפיכה. אין דרך לשחזר את המסמכים שנמחקו או את המספור הישן.\n\nהאם אתה בטוח?")) return;
+    setCleaning(true);
+    setCleanupResult(null);
+    try {
+      const purged = await purgeDeletedDocuments();
+      const renumbered = await renumberDocuments();
+      const lines = [];
+      if (purged.firebase > 0 || purged.local > 0) {
+        lines.push(`נמחקו לצמיתות: ${purged.firebase} מהענן, ${purged.local} מהמקומי`);
+      } else {
+        lines.push("לא נמצאו מסמכים שנמחקו");
+      }
+      const typeLines = Object.entries(renumbered)
+        .map(([k, v]) => `${k}: ${v} מסמכים`)
+        .join(", ");
+      lines.push(`מוספרו מחדש: ${typeLines}`);
+      setCleanupResult(lines.join("\n"));
+      if (onRefreshArchive) onRefreshArchive();
+    } catch (err) {
+      setCleanupResult("שגיאה: " + err.message);
+    } finally {
+      setCleaning(false);
+    }
+  }, [allDocs, onRefreshArchive]);
 
   useEffect(() => {
     const unsub = subscribeToCounters((data) => {
@@ -1449,6 +1480,26 @@ function ManagementPanel({ company, onCompanyChange, showToast, onRefreshArchive
           <p className={`text-xs text-center mt-1 ${passwordChangeMsg.type === "success" ? "text-green-600" : "text-red-500"}`}>
             {passwordChangeMsg.text}
           </p>
+        )}
+      </div>
+
+      {/* ── Maintenance ── */}
+      <div className="mt-6 pt-4 border-t border-red-200">
+        <h4 className="text-xs font-bold text-red-600 mb-2">תחזוקת מאגר</h4>
+        <p className="text-[10px] text-gray-500 mb-2">
+          מחיקת מסמכים שנמחקו לצמיתות ואיפוס המספור הסידורי לפי הסדר הנוכחי.
+        </p>
+        <button
+          onClick={handleCleanup}
+          disabled={cleaning}
+          className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white text-xs font-semibold py-2 rounded transition-colors"
+        >
+          {cleaning ? "מבצע ניקוי..." : "נקה ומספר מחדש"}
+        </button>
+        {cleanupResult && (
+          <div className="mt-2 text-[10px] text-gray-600 bg-gray-50 rounded p-2 leading-relaxed">
+            {cleanupResult}
+          </div>
         )}
       </div>
     </div>

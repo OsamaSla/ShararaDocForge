@@ -426,6 +426,111 @@ export async function resetAllActiveDocuments() {
 }
 
 // ═══════════════════════════════════════════════
+//  MAINTENANCE – Purge deleted & renumber
+// ═══════════════════════════════════════════════
+
+/** Permanently delete all docs with status="deleted" from Firestore and local archive */
+export async function purgeDeletedDocuments() {
+  const purgedCount = { firebase: 0, local: 0 };
+
+  if (firebaseAvailable && db) {
+    await ensureAuthenticated();
+    const q = query(
+      collection(db, DOCUMENTS_COLLECTION),
+      orderBy("createdAt")
+    );
+    const snapshot = await withTimeout(getDocs(q), 60000, "Firestore fetch for purge");
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((d) => {
+      const data = d.data();
+      if (data.status === "deleted") {
+        batch.delete(doc(db, DOCUMENTS_COLLECTION, d.id));
+        purgedCount.firebase++;
+      }
+    });
+    if (purgedCount.firebase > 0) await batch.commit();
+  }
+
+  const local = readLocalArchive();
+  const remaining = local.filter((d) => d.status !== "deleted");
+  purgedCount.local = local.length - remaining.length;
+  if (purgedCount.local > 0) writeLocalArchive(remaining);
+
+  return purgedCount;
+}
+
+/** Renumber all active documents sequentially per doc type, ordered by createdAt */
+export async function renumberDocuments() {
+  const result = {};
+
+  if (firebaseAvailable && db) {
+    await ensureAuthenticated();
+    const q = query(
+      collection(db, DOCUMENTS_COLLECTION),
+      orderBy("createdAt")
+    );
+    const snapshot = await withTimeout(getDocs(q), 60000, "Firestore fetch for renumber");
+
+    const groups = {};
+    snapshot.docs.forEach((d) => {
+      const data = d.data();
+      if (data.status === "deleted") return;
+      const key = data.useCustomDocType ? data.customDocType : (data.docType || "quote");
+      if (!groups[key]) groups[key] = [];
+      groups[key].push({ id: d.id, data });
+    });
+
+    for (const [key, docs] of Object.entries(groups)) {
+      docs.sort((a, b) => {
+        const ta = a.data.createdAt ? new Date(a.data.createdAt?.toMillis?.() || a.data.createdAt).getTime() : 0;
+        const tb = b.data.createdAt ? new Date(b.data.createdAt?.toMillis?.() || b.data.createdAt).getTime() : 0;
+        return ta - tb;
+      });
+
+      const batch = writeBatch(db);
+      docs.forEach((d, i) => {
+        const serial = String(i + 1);
+        batch.update(doc(db, DOCUMENTS_COLLECTION, d.id), { serialNumber: serial });
+      });
+      await batch.commit();
+      result[key] = docs.length;
+    }
+
+    // Reset counters
+    const counterRef = doc(db, COUNTER_DOC_PATH);
+    const counterData = {};
+    for (const key of Object.keys(result)) {
+      counterData[key] = result[key];
+    }
+    await setDoc(counterRef, counterData, { merge: true });
+  }
+
+  // Local archive
+  const local = readLocalArchive();
+  const activeLocal = local.filter((d) => d.status !== "deleted");
+  const localGroups = {};
+  activeLocal.forEach((d) => {
+    const key = d.useCustomDocType ? d.customDocType : (d.docType || "quote");
+    if (!localGroups[key]) localGroups[key] = [];
+    localGroups[key].push(d);
+  });
+  for (const [key, docs] of Object.entries(localGroups)) {
+    docs.sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    });
+    docs.forEach((d, i) => {
+      d.serialNumber = String(i + 1);
+    });
+    result[key] = (result[key] || 0) + docs.length;
+  }
+  writeLocalArchive(local);
+
+  return result;
+}
+
+// ═══════════════════════════════════════════════
 //  CUSTOMER / PROJECT MANAGEMENT (Firestore Sync)
 //  Parent-Child schema:
 //    /customers/{customerName}       — { name }
