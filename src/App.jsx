@@ -283,7 +283,7 @@ function DocumentPreview({ company, doc }) {
               <span className="dir-ltr">{fmt(subtotal)} ₪</span>
             </div>
             <div className="totals-card-row">
-              <span>מע"מ ({vatRate}%)</span>
+              <span>%מע"מ</span>
               <span className="dir-ltr">{fmt(vatAmt)} ₪</span>
             </div>
             <div className="totals-card-row grand">
@@ -502,9 +502,10 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
             value={fmtDate(doc.date)}
             onChange={(e) => {
               let v = e.target.value.replace(/[^\d/]/g, "");
-              if (v.length === 2 && !v.includes("/") && doc.date) v = v + "/";
+              if (v.length === 2 && !v.includes("/")) v = v + "/";
               if (v.length === 5 && v.charAt(2) === "/" && v.charAt(5) !== "/") v = v + "/";
-              set("date", parseDateStr(v));
+              const parsed = parseDateStr(v);
+              if (parsed) set("date", parsed);
             }}
             placeholder="DD/MM/YYYY"
             className="form-input"
@@ -526,19 +527,16 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
       {/* ── VAT Rate Toggle + Custom Input ── */}
       <div className="flex items-center gap-3 flex-wrap">
         <label className="form-label mb-0">מע"מ:</label>
-        {[17, 18].map((r) => (
-          <button
-            key={r}
-            onClick={() => { set("vatRate", r); set("customVat", ""); }}
-            className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-              doc.vatRate === r && !doc.customVat
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {r}%
-          </button>
-        ))}
+        <button
+          onClick={() => { set("vatRate", 18); set("customVat", ""); }}
+          className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+            doc.vatRate === 18 && !doc.customVat
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          %מע"מ
+        </button>
         <div className="flex items-center gap-1">
           <input
             type="number"
