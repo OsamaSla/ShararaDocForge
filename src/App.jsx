@@ -498,18 +498,10 @@ function DocumentForm({ doc, onChange, showValidation, validationErrors }) {
         <div>
           <label className="form-label">תאריך</label>
           <input
-            type="text"
-            value={fmtDate(doc.date)}
-            onChange={(e) => {
-              let v = e.target.value.replace(/[^\d/]/g, "");
-              if (v.length === 2 && !v.includes("/")) v = v + "/";
-              if (v.length === 5 && v.charAt(2) === "/" && v.charAt(5) !== "/") v = v + "/";
-              const parsed = parseDateStr(v);
-              if (parsed) set("date", parsed);
-            }}
-            placeholder="DD/MM/YYYY"
+            type="date"
+            value={doc.date || ""}
+            onChange={(e) => set("date", e.target.value)}
             className="form-input"
-            maxLength={10}
             dir="ltr"
             style={{ textAlign: "center" }}
           />
@@ -961,6 +953,9 @@ function ArchiveView({ onLoadToForm, onPreview, refreshKey }) {
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => onPreview(d)} className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded transition-colors" title="תצוגה">
                     👁
+                  </button>
+                  <button onClick={() => onLoadToForm(d, true)} className="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded transition-colors" title="ערוך מסמך">
+                    ✏️
                   </button>
                   <button onClick={() => handleDuplicate(d)} className="bg-green-50 hover:bg-green-100 text-green-700 px-2 py-1 rounded transition-colors" title="שכפל">
                     📋
